@@ -7,7 +7,7 @@ local bor = bit.bor
 local band = bit.band
 local bnot = bit.bnot
 local blshift = bit.lshift
-local byte = string.byte
+local brshift = bit.rshift
 local char = string.char
 
 local _M = { _VERSION = "0.1" }
@@ -15,11 +15,12 @@ local _M = { _VERSION = "0.1" }
 
 local ok, new_tab = pcall(require, "table.new")
 if not ok then
-    new_tab = function(narr, nrec) return {} end
+    new_tab = function() return {} end
 end
 _M.new_tab = new_tab
 
-local ok, clear_tab = pcall(require, "table.clear")
+local clear_tab
+ok, clear_tab = pcall(require, "table.clear")
 if not ok then
     clear_tab = function(tab)
         for k, _ in pairs(tab) do
@@ -31,7 +32,7 @@ _M.clear_tab = clear_tab
 
 
 function _M.align(value, base)
-    return band(value + base - 1, bnot(base - 1)) 
+    return band(value + base - 1, bnot(base - 1))
 end
 
 

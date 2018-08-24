@@ -63,8 +63,3 @@ local hpack_static_table = {
     {"via", ""},
     {"www-authenticate", ""},
 }
-
-
-local COMMON_HEADER_INDEX = {
-    [""]
-}

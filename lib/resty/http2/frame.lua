@@ -57,8 +57,8 @@ function header.new(length, typ, flags, id)
     local flag_ack = band(flags, FLAG_ACK) ~= 0
     local flag_end_stream = band(flags, FLAG_END_STREAM) ~= 0
     local flag_end_headers = band(flags, FLAG_END_HEADERS) ~= 0
-    local flag_padded = band(flags, FLAG_FRAME_PADDED) ~= 0
-    local flag_priority = band(flags, FLAG_FRAME_PRIORITY) ~= 0
+    local flag_padded = band(flags, FLAG_PADDED) ~= 0
+    local flag_priority = band(flags, FLAG_PRIORITY) ~= 0
 
     return {
         length = length,
@@ -298,12 +298,12 @@ _M.window_update = window_update
 _M.headers = headers
 _M.rst_stream = rst_stream
 
-_M.FRAME_NONE = FRAME_NO_FLAG
-_M.FRAME_ACK = FRAME_ACK_FLAG
-_M.FRAME_END_STREAM = FRAME_END_STREAM_FLAG
-_M.FRAME_END_HEADERS = FRAME_END_HEADERS_FLAG
-_M.FRAME_PADDED = FRAME_PADDED_FLAG
-_M.FRAME_PRIORITY = FRAME_PRIORITY_FLAG
+_M.FRAME_NONE = FLAG_NONE
+_M.FRAME_ACK = FLAG_ACK
+_M.FRAME_END_STREAM = FLAG_END_STREAM
+_M.FRAME_END_HEADERS = FLAG_END_HEADERS
+_M.FRAME_PADDED = FLAG_PADDED
+_M.FRAME_PRIORITY = FLAG_PRIORITY
 
 _M.MAX_WINDOW = MAX_WINDOW
 _M.HEADER_SIZE = HEADER_SIZE

@@ -3,10 +3,11 @@
 local util = require "resty.http2.util"
 
 local new_tab = util.new_tab
+local children_update
 
 
 local _M = {
-    _VERSION = "0.1"
+    _VERSION = "0.1",
 
     STATE_INITIAL = 0,
     STATE_OPENING = 1,
@@ -16,15 +17,37 @@ local _M = {
     STATE_IDLE = 5,
 
     MAX_WEIGHT = 256,
+    DEFAULT_WEIGHT = 16,
 }
 
 
-local function children_update(node)
+children_update = function (node)
+    if not node then
+        return
+    end
+
+    local child = node.child
+    if not child then
+        return
+    end
+
+    local max_weight = _M.MAX_WEIGHT
+    local rank = node.rank
+    local rel_weight = node.rel_weight
+
+    while true do
+        child.rank = rank + 1
+        child.rel_weight = rel_weight / max_weight * child.weight
+
+        children_update(child)
+
+        child = child.next_sibling
+    end
 end
 
 
 -- let depend as stream's parent
-local function set_dependency(depend, stream, excl)
+function _M.set_dependency(depend, stream, excl)
     local root = stream.session.root
 
     if not depend then
@@ -49,7 +72,7 @@ local function set_dependency(depend, stream, excl)
             end
 
             if node == stream then
-                -- firstly take depend out of it's "old parent" 
+                -- firstly take depend out of it's "old parent"
                 local last_node = depend.last_sibling
                 local next_node = depend.next_sibling
 
@@ -137,11 +160,11 @@ function _M.new(sid, weight, session)
         return nil, "orphan stream is banned"
     end
 
-    weight = weight or DEFAULT_WEIGHT
+    weight = weight or _M.DEFAULT_WEIGHT
 
     local stream = {
         sid = sid,
-        state = STATE_INITIAL,
+        state = _M.STATE_INITIAL,
         data = new_tab(1, 0),
         parent = nil,
         next_sibling = nil,
@@ -153,8 +176,6 @@ function _M.new(sid, weight, session)
         opaque_data = nil, -- user private data
         session = session, -- the session
     }
-
-    set_dependency(parent, stream, excl)
 
     return stream
 end
@@ -168,7 +189,7 @@ function _M.new_root()
         parent = nil,
     }
 
-    root.parent = parent
+    root.parent = root
 
     return root
 end

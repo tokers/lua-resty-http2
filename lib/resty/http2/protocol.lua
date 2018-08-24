@@ -7,13 +7,14 @@ local h2_stream = require "resty.http2.stream"
 
 local new_tab = util.new_tab
 local band = bit.band
+local bor = bit.bor
 local MAX_STREAMS_SETTING = 0x3
 local INIT_WINDOW_SIZE_SETTING = 0x4
 local MAX_FRAME_SIZE_SETTING = 0x5
 local MAX_STREAM_ID = 0x7fffffff
 
-local DEFAULT_WINDOW_SIZE = 65535,
-local DEFAULT_MAX_STREAMS = 128,
+local DEFAULT_WINDOW_SIZE = 65535
+local DEFAULT_MAX_STREAMS = 128
 local DEFAULT_MAX_FRAME_SIZE = 0xffffff
 
 local INITIAL_SETTINGS_PAYLOAD = {
@@ -87,7 +88,8 @@ function _M:init()
 
     local incr = h2_frame.MAX_WINDOW - DEFAULT_WINDOW_SIZE
 
-    local wf, err = h2_frame.window_update.new(0x0, incr)
+    local wf
+    wf, err = h2_frame.window_update.new(0x0, incr)
     if not wf then
         return nil, err
     end
@@ -100,7 +102,7 @@ function _M:init()
     h2_frame.settings.pack(sf, data)
     h2_frame.window_update.pack(wf, data)
 
-    local _, err = self.send(self.ctx, data)
+    _, err = self.send(self.ctx, data)
     if err then
         return nil, err
     end
