@@ -12,6 +12,8 @@
   * [RST_STREAM](#rst_stream)
 * [STREAM](#stream)
   * [STREAM STATE](#stream-state)
+* [HPACK](#hpack)
+
 
 # FRAME
 
@@ -151,3 +153,112 @@
 * PP: PUSH_PROMISE frame (with implied CONTINUATIONs)
 * ES: END_STREAM flag
 * R: RST_STREAM frame
+
+```
+
+# HPACK
+
+## Indexed Header Field Representation
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 1 |       Index (7+)          |
++---+---------------------------+
+```
+
+## Literal Header Field with Incremental Indexing
+
+### Indexed Name
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 0 | 1 |      Index (6+)       |
++---+---+-----------------------+
+| H |     Value Length (7+)     |
++---+---------------------------+
+| Value String (Length octets)  |
++-------------------------------+
+```
+
+### New Name
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 0 | 1 |          0            |
++---+---+-----------------------+
+| H |       Name Length (7+)    |
++---+---------------------------+
+|  Name String (Length octets)  |
++---+---------------------------+
+| H |     Value Length (7+)     |
++---+---------------------------+
+|  Value String (Length octets) |
++-------------------------------+
+```
+
+## Literal Header Field without Indexing
+
+### Indexed Name
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 0 | 0 | 0 | 0 |   Index (4+)  |
++---+---+-----------------------+
+| H |     Value Length (7+)     |
++---+---------------------------+
+|  Value String (Length octets) |
++-------------------------------+
+```
+
+### New Name
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 0 | 0 | 0 | 0 |        0      |
++---+---+-----------------------+
+| H |      Name Length (7+)     |
++---+---------------------------+
+|  Name String (Length octets)  |
++---+---------------------------+
+| H |     Value Length (7+)     |
++---+---------------------------+
+|  Value String (Length octets) |
++-------------------------------+
+```
+
+## Literal Header Field Never Indexed
+
+### Indexed Name
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 0 | 0 | 0 | 1 |  Index (4+)   |
++---+---+-----------------------+
+| H |     Value Length (7+)     |
++---+---------------------------+
+|  Value String (Length octets) |
++-------------------------------+
+```
+
+### New Name
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 0 | 0 | 0 | 1 |       0       |
++---+---+-----------------------+
+| H |      Name Length (7+)     |
++---+---------------------------+
+|  Name String (Length octets)  |
++---+---------------------------+
+| H |     Value Length (7+)     |
++---+---------------------------+
+|  Value String (Length octets) |
++-------------------------------+
+```
