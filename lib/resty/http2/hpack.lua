@@ -5,7 +5,6 @@ local util = require "resty.http2.util"
 local char = string.char
 local setmetatable = setmetatable
 local new_tab = util.new_tab
-
 local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
 
@@ -15,67 +14,67 @@ local MAX_TABLE_SIZE = 4096
 local ENTRY_SLOTS = 64
 
 local hpack_static_table = {
-    { ":authority", "" },
-    { ":method", "GET" },
-    { ":method", "POST" },
-    { ":path", "/" },
-    { ":path", "/index.html" },
-    { ":scheme", "http" },
-    { ":scheme", "https" },
-    { ":status", "200" },
-    { ":status", "204" },
-    { ":status", "206" },
-    { ":status", "304" },
-    { ":status", "400" },
-    { ":status", "404" },
-    { ":status", "500" },
-    { "accept-charset", "" },
-    { "accept-encoding", "gzip, deflate" },
-    { "accept-language", "" },
-    { "accept-ranges", "" },
-    { "accept", "" },
-    { "access-control-allow-origin", "" },
-    { "age", "" },
-    { "allow", "" },
-    { "authorization", "" },
-    { "cache-control", "" },
-    { "content-disposition", "" },
-    { "content-encoding", "" },
-    { "content-language", "" },
-    { "content-length", "" },
-    { "content-location", "" },
-    { "content-range", "" },
-    { "content-type", "" },
-    { "cookie", "" },
-    { "date", "" },
-    { "etag", "" },
-    { "expect", "" },
-    { "expires", "" },
-    { "from", "" },
-    { "host", "" },
-    { "if-match", "" },
-    { "if-modified-since", "" },
-    { "if-none-match", "" },
-    { "if-range", "" },
-    {  "if-unmodified-since", ""  },
-    { "last-modified", "" },
-    { "link", "" },
-    { "location", "" },
-    { "max-forwards", "" },
-    { "proxy-authenticate", "" },
-    { "proxy-authorization", "" },
-    { "range", "" },
-    { "referer", "" },
-    { "refresh", "" },
-    { "retry-after", "" },
-    { "server", "" },
-    { "set-cookie", "" },
-    { "strict-transport-security", "" },
-    { "transfer-encoding", "" },
-    { "user-agent", "" },
-    { "vary", "" },
-    { "via", "" },
-    { "www-authenticate", "" },
+    { name = ":authority", value = "" },
+    { name = ":method", value = "GET" },
+    { name = ":method", value = "POST" },
+    { name = ":path", value = "/" },
+    { name = ":path", value = "/index.html" },
+    { name = ":scheme", value = "http" },
+    { name = ":scheme", value = "https" },
+    { name = ":status", value = "200" },
+    { name = ":status", value = "204" },
+    { name = ":status", value = "206" },
+    { name = ":status", value = "304" },
+    { name = ":status", value = "400" },
+    { name = ":status", value = "404" },
+    { name = ":status", value = "500" },
+    { name = "accept-charset", value = "" },
+    { name = "accept-encoding", value = "gzip, deflate" },
+    { name = "accept-language", value = "" },
+    { name = "accept-ranges", value = "" },
+    { name = "accept", value = "" },
+    { name = "access-control-allow-origin", value = "" },
+    { name = "age", value = "" },
+    { name = "allow", value = "" },
+    { name = "authorization",  value = "" },
+    { name = "cache-control",  value = "" },
+    { name = "content-disposition", value = "" },
+    { name = "content-encoding", value = "" },
+    { name = "content-language", value = "" },
+    { name = "content-length", value = "" },
+    { name = "content-location", value = "" },
+    { name = "content-range", value = "" },
+    { name = "content-type", value = "" },
+    { name = "cookie", value = "" },
+    { name = "date", value = "" },
+    { name = "etag", value = "" },
+    { name = "expect", value = "" },
+    { name = "expires", value = "" },
+    { name = "from", value = "" },
+    { name = "host", value = "" },
+    { name = "if-match", value = "" },
+    { name = "if-modified-since", value = "" },
+    { name = "if-none-match", value = "" },
+    { name = "if-range", value = "" },
+    { name =  "if-unmodified-since", value = ""  },
+    { name = "last-modified", value = "" },
+    { name = "link", value = "" },
+    { name = "location", value = "" },
+    { name = "max-forwards", value = "" },
+    { name = "proxy-authenticate", value = "" },
+    { name = "proxy-authorization", value = "" },
+    { name = "range", value = "" },
+    { name = "referer", value = "" },
+    { name = "refresh", value = "" },
+    { name = "retry-after", value = "" },
+    { name = "server", value = "" },
+    { name = "set-cookie", value = "" },
+    { name = "strict-transport-security", value = "" },
+    { name = "transfer-encoding", value = "" },
+    { name = "user-agent", value = "" },
+    { name = "vary", value = "" },
+    { name = "via", value = "" },
+    { name = "www-authenticate", value = "" },
 }
 
 -- use two pointers mimic the dynamic table's borders,
@@ -260,6 +259,48 @@ function _M:resize(new_size)
     dynamic.front = front
     dynamic.size = new_size
     dynamic.free = new_size - cost
+end
+
+
+function _M:get_indexed_header(raw_index)
+    if raw_index <= 0 then
+        return nil, "invalid hpack table index " .. raw_index
+    end
+
+    local static = self.static
+    if raw_index <= #static then
+        return static[raw_index]
+    end
+
+    local dynamic = self.dynamic
+    local front = dynamic.front
+    local back = dynamic.back
+
+    if back == 0 then
+        return nil, "invalid hpack table index " .. raw_index
+    end
+
+    local index = raw_index - #self.static
+
+    if back >= front then
+        if back - front + 1 < index then
+            return nil, "invalid hpack table index " .. raw_index
+        end
+
+        return dynamic.entries[back - index + 1]
+    end
+
+    local count = back + dynamic.slots - front + 1
+    if count < index then
+        return nil, "invalid hpack table index " .. raw_index
+    end
+
+    if index <= back then
+        return dynamic.entries[back - index + 1]
+    end
+
+    local slots = dynamic.slots
+    return dynamic.entries[slots - (index - back) + 1]
 end
 
 

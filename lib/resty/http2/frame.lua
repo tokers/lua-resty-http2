@@ -308,5 +308,28 @@ _M.FRAME_PRIORITY = FLAG_PRIORITY
 _M.MAX_WINDOW = MAX_WINDOW
 _M.HEADER_SIZE = HEADER_SIZE
 
+_M.pack = {
+    [DATA_FRAME] = data.pack,
+    [HEADERS_FRAME] = headers.pack,
+    [PRIORITY_FRAME] = priority.pack,
+    [RST_STREAM_FRAME] = rst_stream.pack,
+    [SETTINGS_FRAME] = settings.pack,
+    [PING_FRAME] = ping.pack,
+    [GOAWAY_FRAME] = goaway.pack,
+    [WINDOW_UPDATE_FRAME] = window_update.pack,
+}
+
+
+_M.unpack = {
+    [DATA_FRAME] = data.unpack,
+    [HEADERS_FRAME] = headers.unpack,
+    [PRIORITY_FRAME] = priority.unpack,
+    [RST_STREAM_FRAME] = rst_stream.unpack,
+    [SETTINGS_FRAME] = settings.unpack,
+    [PING_FRAME] = ping.unpack,
+    [GOAWAY_FRAME] = goaway.unpack,
+    [WINDOW_UPDATE_FRAME] = window_update.unpack,
+}
+
 
 return _M

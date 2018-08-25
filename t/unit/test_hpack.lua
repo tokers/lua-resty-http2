@@ -35,6 +35,17 @@ assert(dynamic.front == 1, "bad front value " .. dynamic.front)
 assert(dynamic.back == 6, "bad back value " .. dynamic.back)
 assert(dynamic.free == 4096 - 47 * 6, "bad free value " .. dynamic.free)
 
+assert(hstate:get_indexed_header(0) == nil)
+local entry = hstate:get_indexed_header(2)
+assert(entry.name == ":method")
+assert(entry.value == "GET")
+
+entry = hstate:get_indexed_header(63)
+assert(entry.name == "header_E")
+assert(entry.value == "value_E")
+
+assert(hstate:get_indexed_header(70) == nil)
+
 -- resize the dynamic table, only two entries can be retained
 hstate:resize(100)
 
@@ -67,6 +78,15 @@ local value = "value_H"
 assert(hstate:insert_entry(name, value), "failed to insert entry")
 assert(dynamic.front == 64, "bad front value " .. dynamic.front)
 assert(dynamic.back == 1, "bad back value " .. dynamic.back)
+
+entry = hstate:get_indexed_header(63)
+assert(entry.name == "header_57")
+assert(entry.value == "value_57")
+
+entry = hstate:get_indexed_header(62)
+assert(entry.name == "header_H")
+assert(entry.value == "value_H")
+assert(hstate:get_indexed_header(64) == nil)
 
 local name = rep("HEADER_I", 5)
 local value = rep("HEADER_I", 5)

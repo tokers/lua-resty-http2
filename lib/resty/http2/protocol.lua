@@ -23,11 +23,7 @@ local INITIAL_SETTINGS_PAYLOAD = {
     { id = MAX_FRAME_SIZE_SETTING, value = DEFAULT_MAX_FRAME_SIZE },
 }
 
-
-local _M = {
-    _VERSION = "0.1",
-}
-
+local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
 
 
@@ -59,12 +55,13 @@ function _M.session(recv, send, ctx)
         next_stream_id = 0x3, -- 0x1 is used for the HTTP/1.1 upgrade
         enable_push = false,
 
-        stream = new_tab(0, 0),
-
-        wco = nil,
-        rco = nil,
+        stream = new_tab(4, 0),
 
         goaway = false,
+
+        output_queue = nil,
+        output_queue_size = 0,
+        last_frame = nil, -- last frame in the output queue
 
         root = root,
     }
@@ -94,6 +91,11 @@ function _M:init()
         return nil, err
     end
 
+    self:frame_queue(sf)
+    self:frame_queue(wf)
+
+    return self:flush_queue()
+
     -- send the SETTINGS the WINDOW_UPDATE frames
     local size = 2 * h2_frame.HEADER_SIZE + sf.header.length + wf.header.length
 
@@ -101,13 +103,41 @@ function _M:init()
 
     h2_frame.settings.pack(sf, data)
     h2_frame.window_update.pack(wf, data)
+end
 
-    _, err = self.send(self.ctx, data)
-    if err then
-        return nil, err
+
+function _M:frame_queue(frame)
+    local output_queue = self.output_queue
+    local last_frame = self.last_frame
+    local queue_size = self.output_queue_size
+
+    if not output_queue then
+        self.output_queue = frame
+        self.last_frame = frame
+        self.output_queue_size = 1
+        return
     end
 
-    return true
+    last_frame.next = frame
+    self.last_frame = frame
+    self.output_queue_size = queue_size + 1
+end
+
+
+function _M:flush_queue()
+    local output_queue = self.output_queue
+    if not output_queue then
+        return true
+    end
+
+    local data = new_tab(self.output_queue_size, 0)
+
+    while true do
+        local frame = output_queue
+
+
+        output_queue = output_queue.next
+    end
 end
 
 
@@ -149,14 +179,14 @@ function _M:submit_request(headers, body, priority, pad)
 end
 
 
-function _M:flush()
-end
-
-
 function _M:close()
     if self.goaway then
         return
     end
 
     self.goaway = true
+end
+
+
+function _M:rst()
 end

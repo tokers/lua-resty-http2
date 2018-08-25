@@ -146,14 +146,12 @@
           ‘------------------------>|        |<-----------------------’
                                     +--------+
 ```
-
 * send: endpoint sends this frame 
 * recv: endpoint receives this frame
 * H: HEADERS frame (with implied CONTINUATIONs)
 * PP: PUSH_PROMISE frame (with implied CONTINUATIONs)
 * ES: END_STREAM flag
 * R: RST_STREAM frame
-
 ```
 
 # HPACK
