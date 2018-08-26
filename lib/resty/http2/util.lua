@@ -9,6 +9,7 @@ local bnot = bit.bnot
 local blshift = bit.lshift
 local brshift = bit.rshift
 local char = string.char
+local type = type
 
 local _M = { _VERSION = "0.1" }
 
@@ -59,6 +60,16 @@ function _M.unpack_u32(b1, b2, b3, b4)
     local mid1 = bor(blshift(b1, 8), b2)
     local mid2 = bor(blshift(b3, 8), b4)
     return bor(blshift(mid1, 16), mid2)
+end
+
+
+function _M.is_num(num)
+    return type(num) == "number"
+end
+
+
+function _M.is_tab(tab)
+    return type(tab) == "table"
 end
 
 

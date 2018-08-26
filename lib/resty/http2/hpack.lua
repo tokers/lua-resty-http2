@@ -5,6 +5,8 @@ local util = require "resty.http2.util"
 local huffenc = require "resty.http2.huff_encode"
 
 local bor = bit.bor
+local brshift = bit.rshift
+local band = bit.band
 local char = string.char
 local concat = table.concat
 local setmetatable = setmetatable
@@ -108,7 +110,6 @@ local hpack_static_table = {
 --
 -- when all the slots are occupied, a larger slots table will be
 -- allocated, all the current data will be moved to there.
---
 
 
 local function table_account(hpack, size)
@@ -128,7 +129,6 @@ local function table_account(hpack, size)
         return false
     end
 
-    local back = dynamic.back
     local front = dynamic.front
     local slots = dynamic.slots
 
@@ -161,8 +161,8 @@ local function write_length(preface, prefix, value, dst)
 
     dst[#dst + 1] = char(bor(prefix, prefix))
     while value >= 128 do
-        dst[#dst + 1] = char(value % 128 + 128)
-        value /= 128
+        dst[#dst + 1] = char(band(value, 0x7f) + 128)
+        value = brshift(value, 7)
     end
 
     dst[#dst + 1] = char(value)
@@ -284,25 +284,6 @@ function _M:resize(new_size)
 end
 
 
--- literal header field with incremental indexing
-function _M:encode(src, dst, lower)
-    local tmp = huffenc.encode(src, lower)
-
-    if tmp then -- encode to huffman codes is a better idea
-        write_length(ENCODE_HUFF, 127, #tmp, dst)
-        dst[#dst + 1] = concat(tmp)
-        return
-    end
-
-    write_length(ENCODE_RAW, 127, #src, dst)
-    if lower then
-        dst[#dst + 1] = src:lower()
-    else
-        dst[#dst + 1] = src
-    end
-end
-
-
 function _M:decode(src, dst)
 end
 
@@ -349,6 +330,25 @@ function _M:get_indexed_header(raw_index)
 end
 
 
+-- literal header field with incremental indexing
+function _M.encode(src, dst, lower)
+    local tmp = huffenc.encode(src, lower)
+
+    if tmp then -- encode to huffman codes is a better idea
+        write_length(ENCODE_HUFF, 127, #tmp, dst)
+        dst[#dst + 1] = concat(tmp)
+        return
+    end
+
+    write_length(ENCODE_RAW, 127, #src, dst)
+    if lower then
+        dst[#dst + 1] = src:lower()
+    else
+        dst[#dst + 1] = src
+    end
+end
+
+
 function _M.indexed(index)
     return char(128 + index)
 end
@@ -360,6 +360,33 @@ end
 
 
 _M.MAX_TABLE_SIZE = MAX_TABLE_SIZE
+
+_M.COMMON_REQUESTS_HEADER_INDEX = {
+    [":authority"]          = 1,
+    ["accept-charset"]      = 15,
+    ["accept-language"]     = 17,
+    ["accept-ranges"]       = 18,
+    ["accept"]              = 19,
+    ["authorization"]       = 23,
+    ["cache-control"]       = 24,
+    ["cookie"]              = 32,
+    ["expect"]              = 35,
+    ["host"]                = 38,
+    ["if-match"]            = 39,
+    ["if-modified-since"]   = 40,
+    ["if-none-match"]       = 41,
+    ["if-range"]            = 42,
+    ["if-unmodified-since"] = 43,
+    ["range"]               = 50,
+    ["referer"]             = 51,
+    ["user-agent"]          = 58,
+    ["via"]                 = 60,
+
+    [":method"]             = { ["GET"] = 2, ["POST"] = 3 },
+    [":path"]               = { ["/"] = 4, ["/index.html"] = 5 },
+    [":scheme"]             = { ["http"] = 6, ["https"] = 7 },
+    ["accept-encoding"]     = { ["gzip, deflate"] = 16 },
+}
 
 
 return _M

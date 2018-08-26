@@ -1,18 +1,22 @@
 -- Copyright Alex Zhang (tokers)
 
-local bit = require "bit"
 local util = require "resty.http2.util"
 local h2_frame = require "resty.http2.frame"
 local h2_stream = require "resty.http2.stream"
+local hpack = require "resty.http2.hpack"
 
 local new_tab = util.new_tab
-local band = bit.band
-local bor = bit.bor
+local clear_tab = util.clear_tab
+local is_num = util.is_num
+local is_tab = util.is_tab
+local concat = table.concat
+local lower = string.lower
+local pairs = pairs
+
 local MAX_STREAMS_SETTING = 0x3
 local INIT_WINDOW_SIZE_SETTING = 0x4
 local MAX_FRAME_SIZE_SETTING = 0x5
 local MAX_STREAM_ID = 0x7fffffff
-
 local DEFAULT_WINDOW_SIZE = 65535
 local DEFAULT_MAX_STREAMS = 128
 local DEFAULT_MAX_FRAME_SIZE = 0xffffff
@@ -23,12 +27,18 @@ local INITIAL_SETTINGS_PAYLOAD = {
     { id = MAX_FRAME_SIZE_SETTING, value = DEFAULT_MAX_FRAME_SIZE },
 }
 
+local IS_CONNECTION_SPEC_HEADERS = {
+    ["connection"] = true,
+    ["keep-alive"] = true,
+    ["proxy-connection"] = true,
+    ["upgrade"] = true,
+    ["transfer-encoding"] = true,
+}
+
+local frag
+local frag_len = 0
 local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
-
-
-local function submit_headers()
-end
 
 
 -- create a new http2 session
@@ -95,14 +105,6 @@ function _M:init()
     self:frame_queue(wf)
 
     return self:flush_queue()
-
-    -- send the SETTINGS the WINDOW_UPDATE frames
-    local size = 2 * h2_frame.HEADER_SIZE + sf.header.length + wf.header.length
-
-    local data = new_tab(size, 0)
-
-    h2_frame.settings.pack(sf, data)
-    h2_frame.window_update.pack(wf, data)
 end
 
 
@@ -129,15 +131,57 @@ function _M:flush_queue()
     if not output_queue then
         return true
     end
-
-    local data = new_tab(self.output_queue_size, 0)
-
-    while true do
-        local frame = output_queue
+end
 
 
-        output_queue = output_queue.next
+-- serialize headers and create a headers frame,
+-- note this function does not check the HTTP protocol semantics,
+-- callers should check this in the higher land.
+function _M:submit_headers(headers, end_stream, priority, pad, sid)
+    local headers_count = #headers
+    if frag_len < headers_count then
+        frag = new_tab(headers_count, 0)
+        frag_len = headers_count
+    else
+        clear_tab(frag)
     end
+
+    for name, value in pairs(headers) do
+        name = lower(name)
+        if IS_CONNECTION_SPEC_HEADERS[name] then
+            goto continue
+        end
+
+        local index = hpack.COMMON_REQUEST_HEADERS_INDEX[name]
+        if is_num(index) then
+            frag[#frag + 1] = hpack.incr_indexed(index)
+            hpack.encode(value, frag, false)
+            goto continue
+        end
+
+        if is_tab(index) then
+            for v_name, v_index in pairs(index) do
+                if value == v_name then
+                    frag[#frag + 1] = hpack.indexed(v_index)
+                    goto continue
+                end
+            end
+        end
+
+        hpack.encode(name, frag, true)
+        hpack.encode(value, frag, true)
+
+        ::continue::
+    end
+
+    frag = concat(frag)
+    local frame, err = h2_frame.headers.new(frag, priority, pad, end_stream,
+                                            sid)
+    if not frame then
+        return nil, err
+    end
+
+    self:frame_queue(frame)
 end
 
 
@@ -154,26 +198,19 @@ function _M:submit_request(headers, body, priority, pad)
 
     self.next_stream_id = sid + 2 -- odd number
 
-    local payload_length = 0
-    local pad_length = 0
-
-    local flags = h2_frame.FLAG_NONE
-    if not body then
-        flags = bor(flags, h2_frame.FLAG_END_STREAM)
+    -- TODO custom stream weight
+    local stream, err = h2_stream.new(sid, h2_stream.DEFAULT_WEIGHT, self)
+    if not stream then
+        return nil, err
     end
 
-    if priority then
-        flags = bor(flags, h2_frame.PRIORITY)
-        if priority.sid == sid then -- self dependency
-            return nil, "stream cannot be self dependency"
-        end
+    local ok
+    ok, err = self:submit_headers(headers, not body, priority, pad)
+    if not ok then
+        return nil, err
     end
 
-    -- basically we don't use this but still we should respect it
-    if pad then
-        flags = bor(flags, h2_frame.FLAG_PADDED)
-        pad_length = pad.length
-    end
+    self.stream[sid] = sid
 
     return true
 end

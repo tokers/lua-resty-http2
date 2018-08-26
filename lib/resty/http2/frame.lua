@@ -253,7 +253,7 @@ function headers.pack(hf, dst)
     local flag_priority = hf.header.flag_priority
 
     if flag_padded then
-        local pad_length = hf.pad_length
+        local pad_length = #hf.pad
         dst[#dst + 1] = char(pad_length)
     end
 
@@ -270,10 +270,49 @@ function headers.pack(hf, dst)
     end
 
     dst[#dst + 1] = hf.block_frags
+
+    if flag_padded then
+        dst[#dst + 1] = hf.pad
+    end
 end
 
 
 function headers.unpack(hf, src)
+end
+
+
+function headers.new(headers, priority, pad, end_stream, sid)
+    local payload_length = #headers
+    local flags = FLAG_NONE
+
+    if end_stream then
+        flags = bor(flags, FLAG_END_STREAM)
+    end
+
+    if priority then
+        if sid == priority.sid then
+            return nil, "stream cannont be self dependency"
+        end
+
+        flags = bor(flags, FLAG_PRIORITY)
+    end
+
+    -- basically we don't use this but still we should respect it
+    if pad then
+        flags = bor(flags, FLAG_PADDED)
+        payload_length = payload_length + #pad
+    end
+
+    local hd = header.new(payload_length, HEADERS_FRAME, flags, sid)
+
+    return {
+        header = hd,
+        depend = priority.sid,
+        weight = priority.weight,
+        excl = priority.excl,
+        block_frags = headers,
+        pad = pad,
+    }
 end
 
 
