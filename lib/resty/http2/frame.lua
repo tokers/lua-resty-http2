@@ -51,6 +51,7 @@ local goaway = {} -- goaway frame
 local window_update = {} -- window_update frame
 local headers = {} -- headers frame
 local rst_stream = {} -- rst_stream frame
+local data = {} -- data frame
 
 
 function header.new(length, typ, flags, id)
@@ -324,6 +325,18 @@ end
 
 function rst_stream.unpack(rf, src)
     rf.error_code = unpack_u32(byte(src, 1, 4))
+end
+
+
+function data.pack(df, dst)
+end
+
+
+function data.unpack(df, src)
+end
+
+
+function data.new()
 end
 
 

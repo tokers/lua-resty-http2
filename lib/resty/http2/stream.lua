@@ -1,23 +1,42 @@
 -- Copyright Alex Zhang (tokers)
 
 local util = require "resty.http2.util"
+local hpack = require "resty.http2.hpack"
+local h2_frame = require "resty.http2.frame"
 
 local new_tab = util.new_tab
+local clear_tab = util.clear_tab
 local children_update
+local pairs = pairs
+local is_num = util.is_num
+local is_tab = util.is_tab
+local lower = string.lower
+local concat = table.concat
 
+local frag
+local frag_len = 0
+
+local STATE_IDLE = 0
+local STATE_OPEN = 1
+local STATE_CLOSED = 3
+local STATE_HALF_CLOSED_LOCAL = 4
+local STATE_HALF_CLOSED_REMOTE = 5
+local STATE_RESERVED_LOCAL = 6
+local STATE_RESERVED_REMOTE = 7
 
 local _M = {
     _VERSION = "0.1",
 
-    STATE_INITIAL = 0,
-    STATE_OPENING = 1,
-    STATE_OPENED = 2,
-    STATE_CLOSED = 3,
-    STATE_RESERVED = 4,
-    STATE_IDLE = 5,
-
     MAX_WEIGHT = 256,
     DEFAULT_WEIGHT = 16,
+}
+
+local IS_CONNECTION_SPEC_HEADERS = {
+    ["connection"] = true,
+    ["keep-alive"] = true,
+    ["proxy-connection"] = true,
+    ["upgrade"] = true,
+    ["transfer-encoding"] = true,
 }
 
 
@@ -156,6 +175,68 @@ function _M:set_dependency(depend, excl)
 end
 
 
+-- serialize headers and create a headers frame,
+-- note this function does not check the HTTP protocol semantics,
+-- callers should check this in the higher land.
+function _M:submit_headers(headers, end_stream, priority, pad)
+    local state = self.state
+    if state ~= STATE_IDLE
+       and state ~= STATE_OPEN
+       and state ~= STATE_RESERVED_LOCAL
+       and state ~= STATE_HALF_CLOSED_REMOTE
+    then
+        return nil, "invalid stream state"
+    end
+
+    local headers_count = #headers
+    if frag_len < headers_count then
+        frag = new_tab(headers_count, 0)
+        frag_len = headers_count
+    else
+        clear_tab(frag)
+    end
+
+    for name, value in pairs(headers) do
+        name = lower(name)
+        if IS_CONNECTION_SPEC_HEADERS[name] then
+            goto continue
+        end
+
+        local index = hpack.COMMON_REQUEST_HEADERS_INDEX[name]
+        if is_num(index) then
+            frag[#frag + 1] = hpack.incr_indexed(index)
+            hpack.encode(value, frag, false)
+            goto continue
+        end
+
+        if is_tab(index) then
+            for v_name, v_index in pairs(index) do
+                if value == v_name then
+                    frag[#frag + 1] = hpack.indexed(v_index)
+                    goto continue
+                end
+            end
+        end
+
+        hpack.encode(name, frag, true)
+        hpack.encode(value, frag, true)
+
+        ::continue::
+    end
+
+    local sid = self.sid
+
+    frag = concat(frag)
+    local frame, err = h2_frame.headers.new(frag, priority, pad, end_stream,
+                                            sid)
+    if not frame then
+        return nil, err
+    end
+
+    self.session:frame_queue(frame)
+end
+
+
 function _M.new(sid, weight, session)
     if not session then
         return nil, "orphan stream is banned"
@@ -165,7 +246,7 @@ function _M.new(sid, weight, session)
 
     local stream = {
         sid = sid,
-        state = _M.STATE_INITIAL,
+        state = _M.STATE_IDLE,
         data = new_tab(1, 0),
         parent = nil,
         next_sibling = nil,
@@ -176,6 +257,8 @@ function _M.new(sid, weight, session)
         rank = -1,
         opaque_data = nil, -- user private data
         session = session, -- the session
+        send_window = session.init_window,
+        recv_window = session.preread_size,
     }
 
     return stream
