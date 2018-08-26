@@ -1,8 +1,12 @@
 -- Copyright Alex Zhang (tokers)
 
+local bit = require "bit"
 local util = require "resty.http2.util"
+local huffenc = require "resty.http2.huff_encode"
 
+local bor = bit.bor
 local char = string.char
+local concat = table.concat
 local setmetatable = setmetatable
 local new_tab = util.new_tab
 local _M = { _VERSION = "0.1" }
@@ -12,6 +16,8 @@ local mt = { __index = _M }
 local MAX_FIELD = 182
 local MAX_TABLE_SIZE = 4096
 local ENTRY_SLOTS = 64
+local ENCODE_HUFF = 0x80
+local ENCODE_RAW = 0x0
 
 local hpack_static_table = {
     { name = ":authority", value = "" },
@@ -147,6 +153,22 @@ local function table_account(hpack, size)
 end
 
 
+local function write_length(preface, prefix, value, dst)
+    if value < prefix then
+        dst[#dst + 1] = char(bor(preface, value))
+        return
+    end
+
+    dst[#dst + 1] = char(bor(prefix, prefix))
+    while value >= 128 do
+        dst[#dst + 1] = char(value % 128 + 128)
+        value /= 128
+    end
+
+    dst[#dst + 1] = char(value)
+end
+
+
 function _M.new(size)
     size = size or MAX_TABLE_SIZE
 
@@ -259,6 +281,29 @@ function _M:resize(new_size)
     dynamic.front = front
     dynamic.size = new_size
     dynamic.free = new_size - cost
+end
+
+
+-- literal header field with incremental indexing
+function _M:encode(src, dst, lower)
+    local tmp = huffenc.encode(src, lower)
+
+    if tmp then -- encode to huffman codes is a better idea
+        write_length(ENCODE_HUFF, 127, #tmp, dst)
+        dst[#dst + 1] = concat(tmp)
+        return
+    end
+
+    write_length(ENCODE_RAW, 127, #src, dst)
+    if lower then
+        dst[#dst + 1] = src:lower()
+    else
+        dst[#dst + 1] = src
+    end
+end
+
+
+function _M:decode(src, dst)
 end
 
 

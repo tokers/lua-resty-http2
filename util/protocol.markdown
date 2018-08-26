@@ -13,7 +13,16 @@
 * [STREAM](#stream)
   * [STREAM STATE](#stream-state)
 * [HPACK](#hpack)
-
+  * [Literal Header Field with Incremental Indexing](#literal-header-field-with-incremental-indexing)
+  * [Literal Header Field with Incremental Indexing](#literal-header-field-with-incremental-indexing)
+    * [Indexed Name](#indexed-name)
+    * [New Name](#new-name)
+  * [Literal Header Field without Indexing](#literal-header-field-without-indexing)
+    * [Indexed Name](#indexed-name)
+    * [New Name](#new-name)
+  * [Literal Header Field Never Indexed](#literal-header-field-never-indexed)
+    * [Indexed Name](#indexed-name)
+    * [New Name](#new-name)
 
 # FRAME
 
