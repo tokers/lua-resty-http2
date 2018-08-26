@@ -3,6 +3,8 @@
 local util = require "resty.http2.util"
 local bit = require "bit"
 
+local new_tab = util.new_tab
+local clear_tab = util.clear_tab
 local bor = bit.bor
 local band = bit.band
 local blshift = bit.lshift
@@ -12,6 +14,8 @@ local str_char = string.char
 
 local BUFBITS = 32
 local BUFBYTES = 4
+local dst
+local dstcap = 0
 
 local _M = { _VERSION = "0.1" }
 
@@ -153,10 +157,21 @@ local huff_encode_table_lc = {
 }
 
 
-function _M.encode(src, dst, lower)
+-- try to encode src with huffman codes,
+-- the shared table dst will be returned to callers,
+-- callers should save data to their own space.
+function _M.encode(src, lower)
+    local srclen = #src
+
+    if dstcap < srclen then
+        dst = new_tab(srclen, 0)
+        dstcap = srclen
+    else
+        clear_tab(dst)
+    end
+
     local buf = 0
     local rest = BUFBITS
-    local srclen = #src
     local table = lower and huff_encode_table_lc or huff_encode_table
 
     for i = 1, srclen do
@@ -171,7 +186,7 @@ function _M.encode(src, dst, lower)
         else
             -- do more harm than good, mimic from nginx
             if srclen <= #dst + BUFBYTES then
-                return false
+                return
             end
 
             buf = bor(buf, brshift(code, len - rest))
@@ -186,19 +201,19 @@ function _M.encode(src, dst, lower)
     end
 
     if rest == BUFBITS then
-        return true
+        return dst
     end
 
     if rest == 0 then
         if #dst + BUFBYTES >= srclen then
-            return false
+            return
         end
 
         for n = BUFBITS - 8, 0, -8 do
             dst[#dst + 1] = str_char(band(brshift(buf, n), 0xff))
         end
 
-        return true
+        return dst
     end
 
     -- padding with 1
@@ -208,7 +223,7 @@ function _M.encode(src, dst, lower)
 
     -- do more harm than good, mimic from nginx
     if #dst + bytes >= srclen then
-        return false
+        return
     end
 
     for i = 1, bytes do
@@ -216,7 +231,7 @@ function _M.encode(src, dst, lower)
         dst[#dst + 1] = str_char(band(brshift(buf, offset), 0xff))
     end
 
-    return true
+    return dst
 end
 
 
