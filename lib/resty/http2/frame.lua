@@ -175,7 +175,7 @@ function settings.new(sid, flags, payload)
     local count = #payload
 
     if band(flags, FLAG_ACK) and count > 0 then
-        return nil, "invalid"
+        return nil, "settings frame with ACK flag cannot take payloads"
     end
 
     local hd = header.new(6 * count, SETTINGS_FRAME, flags, sid)
@@ -300,6 +300,10 @@ function headers.new(headers, priority, pad, end_stream, sid)
 
     -- basically we don't use this but still we should respect it
     if pad then
+        if #pad > 255 then
+            return nil, "invalid pad length"
+        end
+
         flags = bor(flags, FLAG_PADDED)
         payload_length = payload_length + #pad
     end
@@ -329,6 +333,19 @@ end
 
 
 function data.pack(df, dst)
+    header.pack(df, dst)
+
+    local flag_padded = df.header.FLAG_PADDED
+    if flag_padded then
+        local length = #df.pad
+        dst[#dst + 1] = char(length)
+    end
+
+    dst[#dst + 1] = df.payload
+
+    if flag_padded then
+        dst[#dst + 1] = df.pad
+    end
 end
 
 
@@ -336,7 +353,33 @@ function data.unpack(df, src)
 end
 
 
-function data.new()
+function data.new(data, pad, last, sid)
+    if sid == 0x0 then
+        return nil, "invalid stream id"
+    end
+
+    local flags = FLAG_NONE
+    if last then
+        flags = bor(flags, FLAG_END_STREAM)
+    end
+
+    if pad then
+        if #pad > 255 then
+            return nil, "invalid pad length"
+        end
+
+        flags = bor(flags, FLAG_PADDED)
+    end
+
+    local pad_length = pad and #pad or 0
+
+    local hd = header.new(#data + pad_length, DATA_FRAME, flags, sid)
+
+    return {
+        header = hd,
+        pad = pad,
+        payload = data,
+    }
 end
 
 
@@ -349,6 +392,7 @@ _M.goaway = goaway
 _M.window_update = window_update
 _M.headers = headers
 _M.rst_stream = rst_stream
+_M.data = data
 
 _M.FRAME_NONE = FLAG_NONE
 _M.FRAME_ACK = FLAG_ACK
@@ -359,6 +403,8 @@ _M.FRAME_PRIORITY = FLAG_PRIORITY
 
 _M.MAX_WINDOW = MAX_WINDOW
 _M.HEADER_SIZE = HEADER_SIZE
+
+_M.DATA_FRAME = DATA_FRAME
 
 _M.pack = {
     [DATA_FRAME] = data.pack,
