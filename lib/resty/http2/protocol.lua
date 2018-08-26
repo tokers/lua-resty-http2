@@ -37,6 +37,8 @@ local IS_CONNECTION_SPEC_HEADERS = {
 
 local frag
 local frag_len = 0
+local send_buffer
+local send_buffer_size = 0
 local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
 
@@ -127,10 +129,33 @@ end
 
 
 function _M:flush_queue()
-    local output_queue = self.output_queue
-    if not output_queue then
+    local frame = self.output_queue
+    if not frame then
         return true
     end
+
+    local size = self.output_queue_size
+    if send_buffer_size < size then
+        send_buffer_size = size
+        send_buffer = new_tab(size, 0)
+    else
+        clear_tab(send_buffer)
+    end
+
+    while frame do
+        h2_frame.pack[frame.header.type](frame, send_buffer)
+        frame = frame.next
+    end
+
+    self.output_queue_size = 0
+    self.output_queue = nil
+
+    local _, err = self.send(self.ctx, send_buffer)
+    if err then
+        return nil, err
+    end
+
+    return true
 end
 
 

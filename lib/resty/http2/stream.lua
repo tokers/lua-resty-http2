@@ -21,7 +21,7 @@ local _M = {
 }
 
 
-children_update = function (node)
+children_update = function(node)
     if not node then
         return
     end
@@ -46,8 +46,9 @@ children_update = function (node)
 end
 
 
--- let depend as stream's parent
-function _M.set_dependency(depend, stream, excl)
+-- let depend as current stream's parent
+function _M:set_dependency(depend, excl)
+    local stream = self
     local root = stream.session.root
 
     if not depend then
