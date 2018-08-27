@@ -15,6 +15,7 @@ local MAX_STREAM_ID = 0x7fffffff
 local DEFAULT_WINDOW_SIZE = 65535
 local DEFAULT_MAX_STREAMS = 128
 local DEFAULT_MAX_FRAME_SIZE = 0xffffff
+local MAX_WINDOW = h2_stream.MAX_WINDOW
 
 local send_buffer
 local send_buffer_size = 0
@@ -135,19 +136,23 @@ function _M:flush_queue()
         clear_tab(send_buffer)
     end
 
-    while frame do
-        local stream = self.stream_map[frame.header.sid]
-        if not stream then
-            goto continue
-        end
+    local data_frame = h2_frame.DATA_FRAME
 
-        if frame.header.type == h2_frame.DATA_FRAME then
-            -- stranded DATA frames will be sent after then window is update
+    while frame do
+        local header = frame.header
+        local frame_type = header.type
+        if frame_type == data_frame then
+            local stream = self.stream_map[header.sid]
+            if not stream then
+                goto continue
+            end
+
+            -- stranded DATA frames will be sent after the window is update
             if stream.exhausted then
                 goto continue
             end
 
-            local frame_size = frame.header.length + h2_frame.HEADER_SIZE
+            local frame_size = header.length + h2_frame.HEADER_SIZE
             local window = stream.send_window - frame_size
             stream.send_window = window
             if window <= 0 then
@@ -155,7 +160,7 @@ function _M:flush_queue()
             end
         end
 
-        h2_frame.pack[frame.header.type](frame, send_buffer)
+        h2_frame.pack[frame_type](frame, send_buffer)
         size = size - 1
 
         ::continue::
@@ -163,7 +168,7 @@ function _M:flush_queue()
     end
 
     self.output_queue_size = size
-    self.output_queue = nil
+    self.output_queue = frame
 
     local _, err = self.send(self.ctx, send_buffer)
     if err then
@@ -216,6 +221,11 @@ function _M:submit_request(headers, no_body, priority, pad)
 end
 
 
+function _M:submit_window_update(incr)
+    return self.root:submit_window_update(incr)
+end
+
+
 function _M:want_read()
     if self.goaway_sent then
         return false
@@ -240,6 +250,109 @@ function _M:want_write()
     end
 
     return self.output_queue_size > 0
+end
+
+
+-- WINDOW_UPDATE frame will be sent if necessary,
+-- and all the frame payload will be read,
+-- thereby a proper preread_size is needed,
+-- it shoudn't be too large, at least.
+function _M:recv_frame()
+    local ctx = self.ctx
+    local recv = self.recv
+
+    local bytes, err = recv(ctx, h2_frame.HEADER_SIZE)
+    if err then
+        return nil, err
+    end
+
+    local frame
+    local ok
+
+    while true do
+        local hd = h2_frame.header.unpack(bytes)
+        local typ = hd.type
+
+        bytes, err = recv(ctx, hd.length)
+        if err then
+            return nil, err
+        end
+
+        if typ <= h2_frame.MAX_FRAME_ID then
+            bytes, err = recv(ctx, hd.length) -- read the payload
+            if err then
+                return nil, err
+            end
+
+            local sid = hd.sid
+            local stream = self.stream_map[hd.sid]
+            if sid > 0x0 and not stream then
+                -- unknown HTTP/2 stream
+                goto continue
+            end
+
+            frame = new_tab(0, h2_frame.sizeof[typ])
+            frame.header = hd
+
+            h2_frame.unpack[typ](frame, bytes)
+
+            ok, err = h2_frame.check[typ](frame, stream)
+            if not ok then
+                -- TODO takes the corresponding action
+                return nil, err
+            end
+
+            if typ == h2_frame.DATA_FRAME then
+                local recv_window = self.recv_window
+                local length = hd.length
+                local incr
+
+                if length > recv_window then
+                    -- TODO taks the corresponding action
+                    return nil, h2_error.FLOW_CONTROL_ERROR
+                end
+
+                recv_window = recv_window - length
+                if recv_window * 4 < MAX_WINDOW then
+                    incr = MAX_WINDOW - recv_window
+                    ok, err = self:submit_window_update(incr)
+                    if not ok then
+                        return nil, err
+                    end
+
+                    self.recv_window = MAX_WINDOW
+
+                else
+                    self.recv_window = recv_window
+                end
+
+                recv_window = stream.recv_window
+                if length > recv_window then
+                    -- TODO taks the corresponding action
+                    return nil, h2_error.STREAM_CLOSED
+                end
+
+                recv_window = recv_window - length
+                local init_window = stream.init_window
+                if recv_window * 4 < init_window then
+                    incr = MAX_WINDOW - recv_window
+                    ok, err = stream:submit_window_update(incr)
+                    if not ok then
+                        return nil, err
+                    end
+
+                    self.recv_window = init_window
+
+                else
+                    stream.recv_window = recv_window
+                end
+            end
+
+            return frame
+        end
+
+        ::continue::
+    end
 end
 
 

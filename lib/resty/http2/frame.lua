@@ -2,6 +2,8 @@
 
 local bit = require "bit"
 local util = require "resty.http2.util"
+local h2_stream = require "resty.http2.stream"
+local h2_error = require "resty.http2.h2_error"
 
 local bor = bit.bor
 local band = bit.band
@@ -381,25 +383,58 @@ function data.pack(df, dst)
 end
 
 
+-- check the DATA frame's validity,
+-- note the flow control limitations are not checked
+function data.check(df, stream)
+    local hd = df.header
+    local sid = hd.sid
+
+    if sid == 0x0 then
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local flag_padded = hd.FLAG_PADDED
+    local pad = df.pad
+    local length = hd.length
+
+    if flag_padded then
+        if length == 0 then
+            return nil, h2_error.FRAME_SIZE_ERROR
+        end
+
+        if #pad >= length then
+            return nil, h2_error.PROTOCOL_ERROR
+        end
+    end
+
+    if not stream then
+        -- skip the stream related checks when we create DATA frames positively
+        return true
+    end
+
+    local state = stream.state
+    if state ~= h2_stream.STATE_OPEN and
+       state ~= h2_stream.STATE_HALF_CLOSED_LOCAL
+    then
+        return nil, h2_error.STREAM_CLOSED
+    end
+
+    return true
+end
+
+
 function data.unpack(df, src)
+
 end
 
 
 function data.new(payload, pad, last, sid)
-    if sid == 0x0 then
-        return nil, "invalid stream id"
-    end
-
     local flags = FLAG_NONE
     if last then
         flags = bor(flags, FLAG_END_STREAM)
     end
 
     if pad then
-        if #pad > 255 then
-            return nil, "invalid pad length"
-        end
-
         flags = bor(flags, FLAG_PADDED)
     end
 
@@ -407,12 +442,19 @@ function data.new(payload, pad, last, sid)
 
     local hd = header.new(#payload + pad_length, DATA_FRAME, flags, sid)
 
-    return {
+    local df = {
         header = hd,
         pad = pad,
         payload = payload,
         next = nil,
     }
+
+    local ok, err = data.check(df)
+    if not ok then
+        return nil, err
+    end
+
+    return df
 end
 
 
@@ -438,6 +480,7 @@ _M.MAX_WINDOW = MAX_WINDOW
 _M.HEADER_SIZE = HEADER_SIZE
 
 _M.DATA_FRAME = DATA_FRAME
+_M.MAX_FREAME_ID = 0x9
 
 _M.pack = {
     [DATA_FRAME] = data.pack,
@@ -460,6 +503,17 @@ _M.unpack = {
     [PING_FRAME] = ping.unpack,
     [GOAWAY_FRAME] = goaway.unpack,
     [WINDOW_UPDATE_FRAME] = window_update.unpack,
+}
+
+_M.sizeof = {
+    [DATA_FRAME] = 4,
+    [HEADERS_FRAME] = 7,
+    [PRIORITY_FRAME] = 5,
+    [RST_STREAM_FRAME] = 3,
+    [SETTINGS_FRAME] = 4,
+    [PING_FRAME] = 4,
+    [GOAWAY_FRAME] = 5,
+    [WINDOW_UPDATE_FRAME] = 3,
 }
 
 

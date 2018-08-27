@@ -32,6 +32,8 @@ local _M = {
     DEFAULT_WEIGHT = 16,
 }
 
+local mt = { __index = _M }
+
 local IS_CONNECTION_SPEC_HEADERS = {
     ["connection"] = true,
     ["keep-alive"] = true,
@@ -297,12 +299,18 @@ function _M:rst(code)
 end
 
 
+function _M:submit_window_update(incr)
+end
+
+
 function _M.new(sid, weight, session)
     if not session then
         return nil, "orphan stream is banned"
     end
 
     weight = weight or _M.DEFAULT_WEIGHT
+
+    local init_window = session.init_window
 
     local stream = {
         sid = sid,
@@ -317,13 +325,14 @@ function _M.new(sid, weight, session)
         rank = -1,
         opaque_data = nil, -- user private data
         session = session, -- the session
-        send_window = session.init_window,
+        init_window = init_window,
+        send_window = init_window,
         recv_window = session.preread_size,
         exhausted = false,
         has_headers = false,
     }
 
-    return stream
+    return setmetatable(stream, mt)
 end
 
 
@@ -337,8 +346,17 @@ function _M.new_root()
 
     root.parent = root
 
-    return root
+    return setmetatable(root, mt)
 end
+
+
+_M.STATE_IDLE = STATE_IDLE
+_M.STATE_OPEN = STATE_OPEN
+_M.STATE_CLOSED = STATE_CLOSED
+_M.STATE_HALF_CLOSED_LOCAL = STATE_HALF_CLOSED_LOCAL
+_M.STATE_HALF_CLOSED_REMOTE = STATE_HALF_CLOSED_REMOTE
+_M.STATE_RESERVED_LOCAL = STATE_RESERVED_LOCAL
+_M.STATE_RESERVED_REMOTE = STATE_RESERVED_REMOTE
 
 
 return _M
