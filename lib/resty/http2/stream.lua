@@ -235,6 +235,22 @@ function _M:submit_headers(headers, end_stream, priority, pad)
     end
 
     self.session:frame_queue(frame)
+
+    -- FIXME we change the stream state just when the frame was queued,
+    -- maybe it is improper and shoule be postponed
+    -- until the frame was reall sent.
+    if end_stream then
+        self.state = STATE_CLOSED
+
+    else
+        if state == STATE_IDLE then
+            self.state = STATE_OPEN
+
+        elseif state == STATE_RESERVED_LOCAL then
+            self.state = STATE_HALF_CLOSED_REMOTE
+        end
+    end
+
     return true
 end
 
@@ -255,6 +271,28 @@ function _M:submit_data(data, pad, last)
     end
 
     self.session:frame_queue(frame)
+    return true
+end
+
+
+function _M:rst(code)
+    code = code or h2_error.protocol.NO_ERROR
+    local state = self.state
+    if state == STATE_IDLE or state == STATE_CLOSED then
+        return nil, h2_error.INVALID_STREAM_STATE
+    end
+
+    local frame, err = h2_frame.rst.new(code, self.sid)
+    if not frame then
+        return nil, err
+    end
+
+    self.session:frame_queue(frame)
+
+    -- FIXME we change the stream state just when the frame was queued,
+    -- maybe it is improper and shoule be postponed
+    -- until the frame was reall sent.
+    self.state = STATE_CLOSED
     return true
 end
 
@@ -282,6 +320,7 @@ function _M.new(sid, weight, session)
         send_window = session.init_window,
         recv_window = session.preread_size,
         exhausted = false,
+        has_headers = false,
     }
 
     return stream

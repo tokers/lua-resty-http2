@@ -146,6 +146,21 @@ function rst.unpack(rf, src)
 end
 
 
+function rst.new(error_code, sid)
+    if sid == 0x0 then
+        return nil, "invalid stream id"
+    end
+
+    local hd = header.new(4, RST_STREAM_FRAME, FLAG_NONE, sid)
+
+    return {
+        header = hd,
+        error_code = error_code,
+        next = nil,
+    }
+end
+
+
 function settings.pack(sf, dst)
     header.pack(sf.header, dst)
 
