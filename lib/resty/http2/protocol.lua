@@ -256,7 +256,7 @@ end
 -- WINDOW_UPDATE frame will be sent if necessary,
 -- and all the frame payload will be read,
 -- thereby a proper preread_size is needed,
--- it shoudn't be too large, at least.
+-- it shoudn't be too large, at leastly.
 function _M:recv_frame()
     local ctx = self.ctx
     local recv = self.recv
@@ -303,9 +303,10 @@ function _M:recv_frame()
             end
 
             if typ == h2_frame.DATA_FRAME then
+                local incr
                 local recv_window = self.recv_window
                 local length = hd.length
-                local incr
+                local need_flush = false
 
                 if length > recv_window then
                     -- TODO taks the corresponding action
@@ -315,11 +316,11 @@ function _M:recv_frame()
                 recv_window = recv_window - length
                 if recv_window * 4 < MAX_WINDOW then
                     incr = MAX_WINDOW - recv_window
-                    ok, err = self:submit_window_update(incr)
-                    if not ok then
-                        return nil, err
+                    if not self:submit_window_update(incr) then
+                        return self:close(h2_error.INTERNAL_ERROR)
                     end
 
+                    need_flush = true
                     self.recv_window = MAX_WINDOW
 
                 else
@@ -336,15 +337,22 @@ function _M:recv_frame()
                 local init_window = stream.init_window
                 if recv_window * 4 < init_window then
                     incr = MAX_WINDOW - recv_window
-                    ok, err = stream:submit_window_update(incr)
-                    if not ok then
-                        return nil, err
+                    if not stream:submit_window_update(incr) then
+                        return self:close(h2_error.INTERNAL_ERROR)
                     end
 
+                    need_flush = true
                     self.recv_window = init_window
 
                 else
                     stream.recv_window = recv_window
+                end
+
+                if need_flush then
+                    ok, err = self:flush_queue()
+                    if not ok then
+                        return nil, err
+                    end
                 end
             end
 
@@ -358,11 +366,13 @@ end
 
 function _M:close(code, debug_data)
     if self.goaway_sent then
-        return
+        return true
     end
 
     code = code or h2_error.protocol.NO_ERROR
 
     local frame = h2_frame.goaway.new(self.last_stream_id, code, debug_data)
     self:frame_queue(frame)
+
+    return self:flush_queue()
 end

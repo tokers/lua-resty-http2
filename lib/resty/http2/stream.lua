@@ -14,8 +14,8 @@ local is_tab = util.is_tab
 local lower = string.lower
 local concat = table.concat
 
-local frag
-local frag_len = 0
+local buffer
+local buffer_len = 0
 
 local STATE_IDLE = 0
 local STATE_OPEN = 1
@@ -24,6 +24,8 @@ local STATE_HALF_CLOSED_LOCAL = 4
 local STATE_HALF_CLOSED_REMOTE = 5
 local STATE_RESERVED_LOCAL = 6
 local STATE_RESERVED_REMOTE = 7
+
+local MAX_WINDOW = 0x7fffffff
 
 local _M = {
     _VERSION = "0.1",
@@ -192,11 +194,11 @@ function _M:submit_headers(headers, end_stream, priority, pad)
     end
 
     local headers_count = #headers
-    if frag_len < headers_count then
-        frag = new_tab(headers_count, 0)
-        frag_len = headers_count
+    if buffer_len < headers_count then
+        buffer = new_tab(headers_count, 0)
+        buffer_len = headers_count
     else
-        clear_tab(frag)
+        clear_tab(buffer)
     end
 
     for name, value in pairs(headers) do
@@ -207,31 +209,30 @@ function _M:submit_headers(headers, end_stream, priority, pad)
 
         local index = hpack.COMMON_REQUEST_HEADERS_INDEX[name]
         if is_num(index) then
-            frag[#frag + 1] = hpack.incr_indexed(index)
-            hpack.encode(value, frag, false)
+            buffer[#buffer + 1] = hpack.incr_indexed(index)
+            hpack.encode(value, buffer, false)
             goto continue
         end
 
         if is_tab(index) then
             for v_name, v_index in pairs(index) do
                 if value == v_name then
-                    frag[#frag + 1] = hpack.indexed(v_index)
+                    buffer[#buffer + 1] = hpack.indexed(v_index)
                     goto continue
                 end
             end
         end
 
-        hpack.encode(name, frag, true)
-        hpack.encode(value, frag, true)
+        hpack.encode(name, buffer, true)
+        hpack.encode(value, buffer, true)
 
         ::continue::
     end
 
     local sid = self.sid
 
-    frag = concat(frag)
-    local frame, err = h2_frame.headers.new(frag, priority, pad, end_stream,
-                                            sid)
+    local frame, err = h2_frame.headers.new(concat(buffer), priority, pad,
+                                            end_stream, sid)
     if not frame then
         return nil, err
     end
@@ -281,7 +282,7 @@ function _M:rst(code)
     code = code or h2_error.protocol.NO_ERROR
     local state = self.state
     if state == STATE_IDLE or state == STATE_CLOSED then
-        return nil, h2_error.INVALID_STREAM_STATE
+        return nil, "invalid stream state"
     end
 
     local frame, err = h2_frame.rst.new(code, self.sid)
@@ -300,6 +301,20 @@ end
 
 
 function _M:submit_window_update(incr)
+    local state = self.state
+    if state == STATE_IDLE or state == STATE_CLOSED then
+        return nil, "invalid stream state"
+    end
+
+    local frame, err = h2_frame.window_update.new(self.sid, incr)
+    if not frame then
+        return nil, err
+    end
+
+    frame.window_size_increment = incr
+
+    self.session:frame_queue(frame)
+    return true
 end
 
 
@@ -342,6 +357,7 @@ function _M.new_root()
         rank = 0,
         child = nil,
         parent = nil,
+        state = STATE_OPEN,
     }
 
     root.parent = root
@@ -358,5 +374,6 @@ _M.STATE_HALF_CLOSED_REMOTE = STATE_HALF_CLOSED_REMOTE
 _M.STATE_RESERVED_LOCAL = STATE_RESERVED_LOCAL
 _M.STATE_RESERVED_REMOTE = STATE_RESERVED_REMOTE
 
+_M.MAX_WINDOW = MAX_WINDOW
 
 return _M

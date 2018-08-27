@@ -19,7 +19,7 @@ local pack_u32 = util.pack_u32
 local unpack_u32 = util.unpack_u32
 
 local WINDOW_UPDATE_PAYLOAD_SIZE = 4
-local MAX_WINDOW = 0x7fffffff -- 2^31 - 1
+local MAX_WINDOW = h2_stream.MAX_WINDOW
 local HEADER_SIZE = 9
 
 local FLAG_NONE = 0x0
