@@ -130,7 +130,28 @@ function _M:flush_queue()
     end
 
     while frame do
+        local stream = self.stream[frame.header.sid]
+        if not stream then
+            goto continue
+        end
+
+        if frame.header.type == h2_frame.DATA_FRAME then
+            -- stranded DATA frames will be sent after then window is update
+            if stream.exhausted then
+                goto continue
+            end
+
+            local size = frame.header.length + h2_frame.HEADER_SIZE
+            local window = stream.send_window - size
+            stream.send_window = window
+            if window <= 0 then
+                stream.exhausted = true
+            end
+        end
+
         h2_frame.pack[frame.header.type](frame, send_buffer)
+
+        ::continue::
         frame = frame.next
     end
 

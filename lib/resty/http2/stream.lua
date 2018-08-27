@@ -3,6 +3,7 @@
 local util = require "resty.http2.util"
 local hpack = require "resty.http2.hpack"
 local h2_frame = require "resty.http2.frame"
+local h2_error = require "resty.http2.error"
 
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
@@ -185,7 +186,7 @@ function _M:submit_headers(headers, end_stream, priority, pad)
        and state ~= STATE_RESERVED_LOCAL
        and state ~= STATE_HALF_CLOSED_REMOTE
     then
-        return nil, "invalid stream state"
+        return nil, h2_error.INVALID_STREAM_STATE
     end
 
     local headers_count = #headers
@@ -234,6 +235,27 @@ function _M:submit_headers(headers, end_stream, priority, pad)
     end
 
     self.session:frame_queue(frame)
+    return true
+end
+
+
+function _M:submit_data(data, pad, last)
+    local state = self.state
+    if state ~= STATE_OPEN and state ~= STATE_HALF_CLOSED_REMOTE then
+        return nil, h2_error.INVALID_STREAM_STATE
+    end
+
+    if self.exhausted then
+        return nil, h2_error.FLOW_EXHAUSTED
+    end
+
+    local frame, err = h2_frame.data.new(data, pad, last, self.sid)
+    if not frame then
+        return nil, err
+    end
+
+    self.session:frame_queue(frame)
+    return true
 end
 
 
@@ -259,6 +281,7 @@ function _M.new(sid, weight, session)
         session = session, -- the session
         send_window = session.init_window,
         recv_window = session.preread_size,
+        exhausted = false,
     }
 
     return stream
