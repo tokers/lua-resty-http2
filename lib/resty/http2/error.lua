@@ -21,20 +21,19 @@ _M.protocol = {
 
 _M.INVALID_STREAM_STATE = 1
 _M.FLOW_EXHAUSTED = 2
+_M.STREAM_OVERFLOW = 3
 
 
 local error_map = {
     [_M.INVALID_STREAM_STATE] = "invalid stream state",
-    [_M.FLOW_EXHAUSTED] = "flow window is exhausted"
+    [_M.FLOW_EXHAUSTED] = "flow window is exhausted",
+    [_M.STREAM_OVERFLOW] = "concurrent streams exceeds",
 }
 
 
 function _M.strerror(code)
-    return error_str[code]
+    return error_map[code]
 end
-
-
-_M.protocol = protocol_error
 
 
 return _M

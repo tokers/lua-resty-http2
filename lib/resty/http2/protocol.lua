@@ -3,7 +3,7 @@
 local util = require "resty.http2.util"
 local h2_frame = require "resty.http2.frame"
 local h2_stream = require "resty.http2.stream"
-local hpack = require "resty.http2.hpack"
+local h2_error = require "resty.http2.error"
 
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
@@ -39,6 +39,7 @@ function _M.session(recv, send, ctx)
         recv_window = DEFAULT_WINDOW_SIZE,
         init_window = DEFAULT_WINDOW_SIZE,
         preread_size = DEFAULT_WINDOW_SIZE,
+        max_stream = DEFAULT_MAX_STREAMS,
 
         recv = recv, -- handler for reading data
         send = send, -- handler for writing data
@@ -48,9 +49,13 @@ function _M.session(recv, send, ctx)
         next_stream_id = 0x3, -- 0x1 is used for the HTTP/1.1 upgrade
         enable_push = false,
 
-        stream = new_tab(4, 0),
+        stream_map = new_tab(4, 0),
+        total_streams = 0,
+        idle_streams = 0,
+        closed_streams = 0,
 
-        goaway = false,
+        goaway_sent = false,
+        goaway_received = false,
 
         output_queue = nil,
         output_queue_size = 0,
@@ -65,11 +70,12 @@ end
 
 -- send the default settings and advertise the window size
 -- for the whole connection
-function _M:init(preread_size)
+function _M:init(preread_size, max_concurrent_stream)
     preread_size = preread_size or self.preread_size
+    max_concurrent_stream = max_concurrent_stream or DEFAULT_MAX_STREAMS
 
     local payload = {
-        { id = MAX_STREAMS_SETTING, value = DEFAULT_MAX_STREAMS },
+        { id = MAX_STREAMS_SETTING, value = max_concurrent_stream },
         { id = INIT_WINDOW_SIZE_SETTING, value = preread_size },
         { id = MAX_FRAME_SIZE_SETTING, value = DEFAULT_MAX_FRAME_SIZE },
     }
@@ -130,7 +136,7 @@ function _M:flush_queue()
     end
 
     while frame do
-        local stream = self.stream[frame.header.sid]
+        local stream = self.stream_map[frame.header.sid]
         if not stream then
             goto continue
         end
@@ -141,8 +147,8 @@ function _M:flush_queue()
                 goto continue
             end
 
-            local size = frame.header.length + h2_frame.HEADER_SIZE
-            local window = stream.send_window - size
+            local frame_size = frame.header.length + h2_frame.HEADER_SIZE
+            local window = stream.send_window - frame_size
             stream.send_window = window
             if window <= 0 then
                 stream.exhausted = true
@@ -150,12 +156,13 @@ function _M:flush_queue()
         end
 
         h2_frame.pack[frame.header.type](frame, send_buffer)
+        size = size - 1
 
         ::continue::
         frame = frame.next
     end
 
-    self.output_queue_size = 0
+    self.output_queue_size = size
     self.output_queue = nil
 
     local _, err = self.send(self.ctx, send_buffer)
@@ -178,6 +185,15 @@ function _M:submit_request(headers, no_body, priority, pad)
         return nil, "stream id overflow"
     end
 
+    local total = self.total_streams
+    if total == self.max_streams then
+        return nil, h2_error.STRERAM_OVERFLOW
+    end
+
+    if self.goaway_sent or self.goaway_received then
+        return nil, "goaway frame was received or sent"
+    end
+
     self.next_stream_id = sid + 2 -- odd number
 
     -- TODO custom stream weight
@@ -192,20 +208,48 @@ function _M:submit_request(headers, no_body, priority, pad)
         return nil, err
     end
 
-    self.stream[sid] = stream
+    self.stream_map[sid] = stream
+    self.total_streams = total + 1
+    self.idle_streams = self.idle_streams + 1
 
     return stream
 end
 
 
-function _M:close()
-    if self.goaway then
-        return
+function _M:want_read()
+    if self.goaway_sent then
+        return false
     end
 
-    self.goaway = true
+    local total = self.total_streams
+    local closed = self.closed_streams
+    local idle = self.idle_streams
+
+    if total - closed - idle > 0 then
+        -- still has some active streams
+        return true
+    end
+
+    return not self.goaway_received
 end
 
 
-function _M:rst()
+function _M:want_write()
+    if self.goaway_sent then
+        return false
+    end
+
+    return self.output_queue_size > 0
+end
+
+
+function _M:close(code, debug_data)
+    if self.goaway_sent then
+        return
+    end
+
+    code = code or h2_error.protocol.NO_ERROR
+
+    local frame = h2_frame.goaway.new(self.last_stream_id, code, debug_data)
+    self:frame_queue(frame)
 end

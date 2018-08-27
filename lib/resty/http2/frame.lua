@@ -183,6 +183,7 @@ function settings.new(sid, flags, payload)
     return {
         header = hd,
         item = payload,
+        next = nil,
     }
 end
 
@@ -222,6 +223,20 @@ function goaway.unpack(gf, src)
 end
 
 
+function goaway.new(last_sid, error_code, debug_data)
+    local debug_data_len = debug_data and #debug_data or 0
+    local hd = header.new(8 + debug_data_len, GOAWAY_FRAME, FLAG_NONE, 0)
+
+    return {
+        header = hd,
+        last_stream_id = last_sid,
+        error_code = error_code,
+        debug_data = debug_data,
+        next = nil,
+    }
+end
+
+
 function window_update.pack(wf, dst)
     header.pack(wf.header, dst)
     pack_u32(wf.window_size_increment, dst)
@@ -243,6 +258,7 @@ function window_update.new(sid, window)
     return {
         header = hd,
         window_size_increment = window,
+        next = nil,
     }
 end
 
@@ -282,16 +298,16 @@ function headers.unpack(hf, src)
 end
 
 
-function headers.new(headers, priority, pad, end_stream, sid)
-    local payload_length = #headers
+function headers.new(frags, pri, pad, end_stream, sid)
+    local payload_length = #frags
     local flags = FLAG_NONE
 
     if end_stream then
         flags = bor(flags, FLAG_END_STREAM)
     end
 
-    if priority then
-        if sid == priority.sid then
+    if pri then
+        if sid == pri.sid then
             return nil, "stream cannont be self dependency"
         end
 
@@ -312,11 +328,12 @@ function headers.new(headers, priority, pad, end_stream, sid)
 
     return {
         header = hd,
-        depend = priority.sid,
-        weight = priority.weight,
-        excl = priority.excl,
-        block_frags = headers,
+        depend = pri.sid,
+        weight = pri.weight,
+        excl = pri.excl,
+        block_frags = frags,
         pad = pad,
+        next = nil,
     }
 end
 
@@ -353,7 +370,7 @@ function data.unpack(df, src)
 end
 
 
-function data.new(data, pad, last, sid)
+function data.new(payload, pad, last, sid)
     if sid == 0x0 then
         return nil, "invalid stream id"
     end
@@ -373,12 +390,13 @@ function data.new(data, pad, last, sid)
 
     local pad_length = pad and #pad or 0
 
-    local hd = header.new(#data + pad_length, DATA_FRAME, flags, sid)
+    local hd = header.new(#payload + pad_length, DATA_FRAME, flags, sid)
 
     return {
         header = hd,
         pad = pad,
-        payload = data,
+        payload = payload,
+        next = nil,
     }
 end
 
