@@ -24,7 +24,6 @@ local mt = { __index = _M }
 
 
 local function check_window(self, stream, hd)
-    local incr
     local recv_window = self.recv_window
     local length = hd.length
     local need_flush = false
@@ -37,8 +36,7 @@ local function check_window(self, stream, hd)
 
     recv_window = recv_window - length
     if recv_window * 4 < MAX_WINDOW then
-        incr = MAX_WINDOW - recv_window
-        if not self:submit_window_update(incr) then
+        if not self:submit_window_update(MAX_WINDOW - recv_window) then
             local _, err = self:close(h2_error.INTERNAL_ERROR)
             return nil, err or "failed to create window_update frame"
         end
@@ -61,8 +59,7 @@ local function check_window(self, stream, hd)
     recv_window = recv_window - length
     local init_window = stream.init_window
     if recv_window * 4 < init_window then
-        incr = MAX_WINDOW - recv_window
-        if not stream:submit_window_update(incr) then
+        if not stream:submit_window_update(MAX_WINDOW - recv_window) then
             local _, err = self:close(h2_error.INTERNAL_ERROR)
             return nil, err or "failed to create window_update frame"
         end
