@@ -396,15 +396,13 @@ function headers.unpack(hf, src, stream)
 
         debug_log("HEADERS frame sid: ", sid, " depends on ", depend,
                   " excl: ", excl, "weight: ", weight)
-    end
 
-    if depend == sid then
-        debug_log("server sent HEADERS frame for stream ", sid,
-                  " with incorrect dependency")
-        return nil, h2_error.STREAM_PROTOCOL_ERROR
-    end
+        if depend == sid then
+            debug_log("server sent HEADERS frame for stream ", sid,
+                      " with incorrect dependency")
+            return nil, h2_error.STREAM_PROTOCOL_ERROR
+        end
 
-    if flag_priority then
         stream.weight = weight
         stream:set_dependency(session.streams_map[depend], excl)
     end
@@ -438,6 +436,8 @@ function headers.unpack(hf, src, stream)
         -- so the offset is cached.
         cached[#cached + 1] = { src, offset, length }
     end
+
+    return true
 end
 
 
@@ -509,57 +509,87 @@ function data.pack(df, dst)
 end
 
 
--- check the DATA frame's validity,
--- note the flow control limitations are not checked
-function data.check(df, stream)
-    local hd = df.header
-    local sid = hd.sid
+function data.unpack(df, src, stream)
+    local sid = stream.sid
 
     if sid == 0x0 then
+        debug_log("server sent DATA frame with incorrect identifier ", sid)
         return nil, h2_error.PROTOCOL_ERROR
-    end
-
-    local flag_padded = hd.FLAG_PADDED
-    local pad = df.pad
-    local length = hd.length
-
-    if flag_padded then
-        if length == 0 then
-            return nil, h2_error.FRAME_SIZE_ERROR
-        end
-
-        if #pad >= length then
-            return nil, h2_error.PROTOCOL_ERROR
-        end
-    end
-
-    if not stream then
-        -- skip the stream related checks when we create DATA frames positively
-        return true
     end
 
     local state = stream.state
     if state ~= h2_stream.STATE_OPEN and
        state ~= h2_stream.STATE_HALF_CLOSED_LOCAL
     then
+        debug_log("server sent DATA frame for stream ", sid,
+                  " with invalid state")
         return nil, h2_error.STREAM_CLOSED
     end
 
-    return true
-end
-
-
-function data.unpack(df, src)
     local hd = df.header
+    local flag_padded = hd.FLAG_PADDED
     local length = hd.length
 
-    if hd.FLAG_PADDED then
-        pad_length = band(byte(src), 0xff)
+    if flag_padded then
+        if length == 0 then
+            debug_log("server sent padded DATA frame with incorrect length: 0")
+            return nil, h2_error.FRAME_SIZE_ERROR
+        end
+
+        local pad_length = band(byte(src, 1, 1), 0xff)
+
+        if pad_length >= length then
+            debug_log("server sent padded DATA frame with incorrect length: ",
+                      length, ", padding: ", pad_length)
+            return nil, h2_error.PROTOCOL_ERROR
+        end
+
         df.payload = sub(src, 2, 1 + length - pad_length)
-        df.pad = sub(src, 2 + length - pad_length, length)
     else
         df.payload = src
     end
+
+    if state == h2_stream.STATE_OPEN then
+        stream.state = h2_stream.STATE_HALF_CLOSED_REMOTE
+    else
+        stream.state = h2_stream.STATE_CLOSED
+    end
+
+    local session = stream.session
+    local recv_window = session.recv_window
+    if length > recv_window then
+        return nil, h2_error.FLOW_CONTROL_ERROR
+    end
+
+    recv_window = recv_window - length
+    if recv_window * 4 < MAX_WINDOW then
+        if not session:submit_window_update(MAX_WINDOW - recv_window) then
+            return nil, h2_error.INTERNAL_ERROR
+        end
+
+        recv_window = MAX_WINDOW
+    end
+
+    session.recv_window = recv_window
+
+    local init_window = stream.init_window
+    recv_window = stream.recv_window
+    if length > recv_window then
+        return nil, h2_error.STREAM_FLOW_CONTROL_ERROR
+    end
+
+    recv_window = recv_window - length
+    if recv_window * 4 < init_window then
+        if not session:submit_window_update(MAX_WINDOW - recv_window) then
+            return nil, h2_error.INTERNAL_ERROR
+        end
+
+        recv_window = init_window
+    end
+
+    stream.recv_window = recv_window
+
+    return true
 end
 
 

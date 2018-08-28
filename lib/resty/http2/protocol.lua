@@ -7,7 +7,6 @@ local h2_error = require "resty.http2.error"
 
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
-local strerror = h2_error.strerror
 
 local MAX_STREAMS_SETTING = 0x3
 local INIT_WINDOW_SIZE_SETTING = 0x4
@@ -16,7 +15,6 @@ local MAX_STREAM_ID = 0x7fffffff
 local DEFAULT_WINDOW_SIZE = 65535
 local DEFAULT_MAX_STREAMS = 128
 local DEFAULT_MAX_FRAME_SIZE = 0xffffff
-local MAX_WINDOW = h2_stream.MAX_WINDOW
 
 local send_buffer
 local send_buffer_size = 0
@@ -24,100 +22,9 @@ local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
 
 
-function _M:check_window(stream, hd)
-    local recv_window = self.recv_window
-    local length = hd.length
-    local need_flush = false
-
-    -- check the whole connection
-    if length > recv_window then
-        local _, err = self:close(h2_error.FLOW_CONTROL_ERROR)
-        return nil, err or "client violated connection flow control"
-    end
-
-    recv_window = recv_window - length
-    if recv_window * 4 < MAX_WINDOW then
-        if not self:submit_window_update(MAX_WINDOW - recv_window) then
-            local _, err = self:close(h2_error.INTERNAL_ERROR)
-            return nil, err or "failed to create window_update frame"
-        end
-
-        need_flush = true
-        self.recv_window = MAX_WINDOW
-
-    else
-        self.recv_window = recv_window
-    end
-
-    -- check the specific stream
-    recv_window = stream.recv_window
-    if length > recv_window then
-        -- TODO taks the corresponding action
-        local _, err = stream:rst(h2_error.FLOW_CONTROL_ERROR)
-        return nil, err or "client violated flow control for stream"
-    end
-
-    recv_window = recv_window - length
-    local init_window = stream.init_window
-    if recv_window * 4 < init_window then
-        if not stream:submit_window_update(MAX_WINDOW - recv_window) then
-            local _, err = self:close(h2_error.INTERNAL_ERROR)
-            return nil, err or "failed to create window_update frame"
-        end
-
-        need_flush = true
-        self.recv_window = init_window
-
-    else
-        stream.recv_window = recv_window
-    end
-
-    if need_flush then
-        local ok, err = self:flush_queue()
-        if not ok then
-            return nil, err
-        end
-    end
-
-    return true
+local function handle_error(self, stream, error_code)
 end
 
-
-local function data_handler(self, stream, frame)
-    local typ = frame.header.type
-    local ok, code = h2_frame.check[typ](frame, stream)
-    if not ok then
-        local err
-        if code == h2_error.STREAM_CLOSED then
-            ok, err = stream:rst(err)
-        else
-            ok, err = self:close(err)
-        end
-
-        return err or strerror(code)
-    end
-
-    ok, err = check_window(self, stream, frame)
-    if not ok then
-        return nil, err
-    end
-
-    local state = stream.state
-    if state == h2_stream.STATE_OPEN then
-        state = h2_stream.STATE_HALF_CLOSED_REMOTE
-    else
-        state = h2_stream.STATE_CLOSED
-    end
-
-    stream.state = state
-
-    return true
-end
-
-
-local frame_handler = {
-    [h2_frame.DATA_FRAME] = data_handler,
-}
 
 -- create a new http2 session
 function _M.session(recv, send, ctx)
@@ -128,8 +35,6 @@ function _M.session(recv, send, ctx)
     if not send then
         return nil, "empty write handler"
     end
-
-    local root = h2_stream.new_root()
 
     local session = {
         send_window = DEFAULT_WINDOW_SIZE,
@@ -159,8 +64,10 @@ function _M.session(recv, send, ctx)
         output_queue_size = 0,
         last_frame = nil, -- last frame in the output queue
 
-        root = root,
+        root = nil,
     }
+
+    session.root = h2_stream.new_root(session)
 
     return setmetatable(session, mt)
 end
@@ -387,14 +294,14 @@ function _M:recv_frame()
                 goto continue
             end
 
+            stream = stream or self.root
+
             frame = new_tab(0, h2_frame.sizeof[typ])
             frame.header = hd
 
-            h2_frame.unpack[typ](frame, bytes)
-
-            ok, err = frame_handler(self, stream, frame)
+            ok, err = h2_frame.unpack[typ](frame, bytes, stream)
             if not ok then
-                return nil, err
+                return handle_error(self, stream, err)
             end
 
             return frame

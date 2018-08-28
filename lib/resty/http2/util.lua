@@ -73,4 +73,14 @@ function _M.is_tab(tab)
 end
 
 
+-- TODO recycle the buffer struct if necessary
+function _M.new_buffer(data, pos, last)
+    return {
+        data = data,
+        pos = pos,
+        last = last,
+    }
+end
+
+
 return _M

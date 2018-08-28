@@ -23,7 +23,8 @@ _M.STREAM_OVERFLOW = 3
 
 
 -- we use negative codes to represent the some stream-level errors
-_M.STREAM_PROTOCOL_ERROR = -_M.PROTOCOL_ERROR
+_M.STREAM_PROTOCOL_ERROR = - _M.PROTOCOL_ERROR
+_M.STREAM_FLOW_CONTROL_ERROR = - _M.FLOW_CONTROL_ERROR
 
 local error_map = {
     [_M.INVALID_STREAM_STATE] = "invalid stream state",
@@ -38,7 +39,11 @@ end
 
 
 function _M.is_stream_error(code)
-    return code < 0 or code == _M.REFUSED_STREAM
+    if code < 0 then
+        return true
+    end
+
+    return code == _M.REFUSED_STREAM or code == _M.STREAM_CLOSED
 end
 
 

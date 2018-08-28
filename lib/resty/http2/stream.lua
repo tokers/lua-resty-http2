@@ -243,10 +243,8 @@ function _M:submit_headers(headers, end_stream, priority, pad)
         ::continue::
     end
 
-    local sid = self.sid
-
     local frame, err = h2_frame.headers.new(concat(buffer), priority, pad,
-                                            end_stream, end_headers, sid)
+                                            end_stream, sid)
     if not frame then
         return nil, err
     end
@@ -268,9 +266,7 @@ function _M:submit_headers(headers, end_stream, priority, pad)
         end
     end
 
-    if end_headers then
-        self.end_headers = true
-    end
+    self.end_headers = true
 
     return true
 end
@@ -368,13 +364,14 @@ function _M.new(sid, weight, session)
 end
 
 
-function _M.new_root()
+function _M.new_root(session)
     local root = {
         sid = 0x0,
         rank = 0,
         child = nil,
         parent = nil,
         state = STATE_OPEN,
+        session = session,
     }
 
     root.parent = root
