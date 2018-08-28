@@ -21,6 +21,10 @@ _M.INVALID_STREAM_STATE = 1
 _M.FLOW_EXHAUSTED = 2
 _M.STREAM_OVERFLOW = 3
 
+
+-- we use negative codes to represent the some stream-level errors
+_M.STREAM_PROTOCOL_ERROR = -_M.PROTOCOL_ERROR
+
 local error_map = {
     [_M.INVALID_STREAM_STATE] = "invalid stream state",
     [_M.FLOW_EXHAUSTED] = "flow window is exhausted",
@@ -30,6 +34,11 @@ local error_map = {
 
 function _M.strerror(code)
     return error_map[code]
+end
+
+
+function _M.is_stream_error(code)
+    return code < 0 or code == _M.REFUSED_STREAM
 end
 
 

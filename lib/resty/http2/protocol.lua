@@ -24,7 +24,7 @@ local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
 
 
-local function check_window(self, stream, hd)
+function _M:check_window(stream, hd)
     local recv_window = self.recv_window
     local length = hd.length
     local need_flush = false
@@ -150,6 +150,7 @@ function _M.session(recv, send, ctx)
         total_streams = 0,
         idle_streams = 0,
         closed_streams = 0,
+        processing = 0,
 
         goaway_sent = false,
         goaway_received = false,

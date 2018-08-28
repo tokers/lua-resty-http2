@@ -193,6 +193,20 @@ function _M:submit_headers(headers, end_stream, priority, pad)
         return nil, h2_error.INVALID_STREAM_STATE
     end
 
+    local sid = self.sid
+
+    if sid == 0 then
+        return nil, "cannot submit headers to the whole connection"
+    end
+
+    if sid % 2 == 0 then
+        return nil, "peer-initiated stream"
+    end
+
+    if self.end_headers then
+        return nil, "end headers"
+    end
+
     local headers_count = #headers
     if buffer_len < headers_count then
         buffer = new_tab(headers_count, 0)
@@ -232,7 +246,7 @@ function _M:submit_headers(headers, end_stream, priority, pad)
     local sid = self.sid
 
     local frame, err = h2_frame.headers.new(concat(buffer), priority, pad,
-                                            end_stream, sid)
+                                            end_stream, end_headers, sid)
     if not frame then
         return nil, err
     end
@@ -252,6 +266,10 @@ function _M:submit_headers(headers, end_stream, priority, pad)
         elseif state == STATE_RESERVED_LOCAL then
             self.state = STATE_HALF_CLOSED_REMOTE
         end
+    end
+
+    if end_headers then
+        self.end_headers = true
     end
 
     return true
@@ -344,7 +362,6 @@ function _M.new(sid, weight, session)
         send_window = init_window,
         recv_window = session.preread_size,
         exhausted = false,
-        end_headers = false,
     }
 
     return setmetatable(stream, mt)

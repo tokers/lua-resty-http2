@@ -52,8 +52,19 @@ local ping = {} -- ping frame
 local goaway = {} -- goaway frame
 local window_update = {} -- window_update frame
 local headers = {} -- headers frame
+local continuation = {} -- continuation frame
 local rst_stream = {} -- rst_stream frame
 local data = {} -- data frame
+
+local ngx_log = ngx.log
+local DEBUG = ngx.DEBUG
+local debug_log
+
+if ngx.config.debug then
+    debug_log = function(...) ngx_log(DEBUG, ...) end
+else
+    debug_log = function() end
+end
 
 
 function header.new(length, typ, flags, id)
@@ -311,12 +322,121 @@ function headers.pack(hf, dst)
 end
 
 
-function headers.unpack(hf, src)
+function headers.unpack(hf, src, stream)
     local hd = hf.header
 
     local flag_padded = hd.FLAG_PADDED
-    if flag_padded then
+    local flag_priority = hd.FLAG_PRIORITY
 
+    local length = hd.length
+    local offset = 0
+    local size = 0
+    local depend
+    local weight
+    local excl = false
+
+    local sid = stream.sid
+    local session = stream.session
+    local next_stream_id = session.next_stream_id
+
+    if sid % 2 == 1 or sid >= next_stream_id then
+        debug_log("server sent HEADERS frame with incorrect identifier", sid)
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local state = stream.state
+    if state ~= h2_stream.STATE_OPEN and
+       state ~= h2_stream.STATE_IDLE and
+       state ~= h2_stream.STATE_REVERSED_LOCAL and
+       state ~= h2_stream.STATE_HALF_CLOSED_REMOTE
+    then
+        debug_log("server sent HEADERS frame for stream ", sid,
+                  " with invalid state")
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    if flag_padded then
+        size = 1
+    end
+
+    if flag_priority then
+        -- stream dependency (32) + weight (8)
+        size = size + 5
+    end
+
+    if size <= length then
+        debug_log("server sent HEADERS frame with incorrect length ", length)
+        return nil, h2_error.FRAME_SIZE_ERROR
+    end
+
+    length = length - size
+
+    if flag_padded then
+        local pad_length = band(byte(src, 1, 1), 0xff)
+        if length < pad_length then
+            debug_log("server sent padded HEADERS frame with ",
+                      "incorrect length: ", length, ", padding: ", pad_length)
+            return nil, h2_error.FRAME_SIZE_ERROR
+        end
+
+        offset = 1
+        length = length - pad_length
+    end
+
+    if flag_priority then
+        depend = unpack_u32(byte(src, offset + 1, offset + 4))
+        if band(brshift(depend, 31), 1) then
+            excl = true
+        end
+
+        depend = band(depend, 0x7fffffff)
+
+        weight = band(byte(src, offset + 5, offset + 5), 0xff)
+        offset = offset + 5
+
+        debug_log("HEADERS frame sid: ", sid, " depends on ", depend,
+                  " excl: ", excl, "weight: ", weight)
+    end
+
+    if depend == sid then
+        debug_log("server sent HEADERS frame for stream ", sid,
+                  " with incorrect dependency")
+        return nil, h2_error.STREAM_PROTOCOL_ERROR
+    end
+
+    if flag_priority then
+        stream.weight = weight
+        stream:set_dependency(session.streams_map[depend], excl)
+    end
+
+    if hd.FLAG_END_STREAM then
+        if state == h2_stream.STATE_OPEN then
+            stream.state = h2_stream.STATE_HALF_CLOSED_REMOTE
+        elseif state == h2_stream.STATE_IDLE then
+            stream.state = h2_stream.STATE_OPEN
+        else
+            stream.state = h2_stream.STATE_CLOSED
+        end
+    end
+
+    -- XXX don't have a good way to estimate a proper size
+    hf.block_frags = new_tab(0, 8)
+
+    -- just skip the incompleting decode operation
+    -- if we don't receive the whole headers (it's rare),
+    -- that makes the hpack codes simple. :)
+    if hd.flag_end_headers then
+        session.hpack:decode(src, offset, length, hf.block_frags)
+    else
+        local cached = session.hpack.cached
+        if not cached then
+            cached = new_tab(2, 0)
+            session.hpack.cached = cached
+        end
+
+        -- we really don't want to create too many strings,
+        -- so the offset is cached.
+        cached[#cached + 1] = { src, offset, length }
     end
 end
 
@@ -431,8 +551,6 @@ end
 
 function data.unpack(df, src)
     local hd = df.header
-    local flag_padded = hd.FLAG_PADDED
-    local pad_length = 0
     local length = hd.length
 
     if hd.FLAG_PADDED then
@@ -483,6 +601,7 @@ _M.ping = ping
 _M.goaway = goaway
 _M.window_update = window_update
 _M.headers = headers
+_M.continuation = continuation
 _M.rst_stream = rst_stream
 _M.data = data
 

@@ -21,6 +21,10 @@ local ENTRY_SLOTS = 64
 local ENCODE_HUFF = 0x80
 local ENCODE_RAW = 0x0
 
+local HPACK_AGAIN = 0
+local HPACK_ERROR = 1
+local HPACK_DONE = 2
+
 local hpack_static_table = {
     { name = ":authority", value = "" },
     { name = ":method", value = "GET" },
@@ -186,6 +190,7 @@ function _M.new(size)
     return setmetatable({
         static = hpack_static_table,
         dynamic = dynamic,
+        cached = nil,
     }, mt)
 end
 
@@ -284,7 +289,13 @@ function _M:resize(new_size)
 end
 
 
-function _M:decode(src, dst)
+function _M:decode(src, pos, dst)
+    local len = #src
+
+    while pos <= len do
+        local b = band(byte(src, pos, pos), 0xff)
+        pos = pos + 1
+    end
 end
 
 
