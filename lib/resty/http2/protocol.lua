@@ -23,6 +23,68 @@ local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
 
 
+local function check_window(self, stream, hd)
+    local incr
+    local recv_window = self.recv_window
+    local length = hd.length
+    local need_flush = false
+
+    -- check the whole connection
+    if length > recv_window then
+        local _, err = self:close(h2_error.FLOW_CONTROL_ERROR)
+        return nil, err or "client violated connection flow control"
+    end
+
+    recv_window = recv_window - length
+    if recv_window * 4 < MAX_WINDOW then
+        incr = MAX_WINDOW - recv_window
+        if not self:submit_window_update(incr) then
+            local _, err = self:close(h2_error.INTERNAL_ERROR)
+            return nil, err or "failed to create window_update frame"
+        end
+
+        need_flush = true
+        self.recv_window = MAX_WINDOW
+
+    else
+        self.recv_window = recv_window
+    end
+
+    -- check the specific stream
+    recv_window = stream.recv_window
+    if length > recv_window then
+        -- TODO taks the corresponding action
+        local _, err = stream:rst(h2_error.FLOW_CONTROL_ERROR)
+        return nil, err or "client violated flow control for stream"
+    end
+
+    recv_window = recv_window - length
+    local init_window = stream.init_window
+    if recv_window * 4 < init_window then
+        incr = MAX_WINDOW - recv_window
+        if not stream:submit_window_update(incr) then
+            local _, err = self:close(h2_error.INTERNAL_ERROR)
+            return nil, err or "failed to create window_update frame"
+        end
+
+        need_flush = true
+        self.recv_window = init_window
+
+    else
+        stream.recv_window = recv_window
+    end
+
+    if need_flush then
+        local ok, err = self:flush_queue()
+        if not ok then
+            return nil, err
+        end
+    end
+
+    return true
+end
+
+
 -- create a new http2 session
 function _M.session(recv, send, ctx)
     if not recv then
@@ -287,7 +349,7 @@ function _M:recv_frame()
             local sid = hd.sid
             local stream = self.stream_map[hd.sid]
             if sid > 0x0 and not stream then
-                -- unknown HTTP/2 stream
+                -- unknown HTTP/2 stream, just skip the payload
                 goto continue
             end
 
@@ -303,56 +365,9 @@ function _M:recv_frame()
             end
 
             if typ == h2_frame.DATA_FRAME then
-                local incr
-                local recv_window = self.recv_window
-                local length = hd.length
-                local need_flush = false
-
-                if length > recv_window then
-                    -- TODO taks the corresponding action
-                    return nil, h2_error.FLOW_CONTROL_ERROR
-                end
-
-                recv_window = recv_window - length
-                if recv_window * 4 < MAX_WINDOW then
-                    incr = MAX_WINDOW - recv_window
-                    if not self:submit_window_update(incr) then
-                        return self:close(h2_error.INTERNAL_ERROR)
-                    end
-
-                    need_flush = true
-                    self.recv_window = MAX_WINDOW
-
-                else
-                    self.recv_window = recv_window
-                end
-
-                recv_window = stream.recv_window
-                if length > recv_window then
-                    -- TODO taks the corresponding action
-                    return nil, h2_error.STREAM_CLOSED
-                end
-
-                recv_window = recv_window - length
-                local init_window = stream.init_window
-                if recv_window * 4 < init_window then
-                    incr = MAX_WINDOW - recv_window
-                    if not stream:submit_window_update(incr) then
-                        return self:close(h2_error.INTERNAL_ERROR)
-                    end
-
-                    need_flush = true
-                    self.recv_window = init_window
-
-                else
-                    stream.recv_window = recv_window
-                end
-
-                if need_flush then
-                    ok, err = self:flush_queue()
-                    if not ok then
-                        return nil, err
-                    end
+                ok, err = check_window(self, stream, hd)
+                if not ok then
+                    return nil, err
                 end
             end
 
