@@ -344,7 +344,7 @@ function _M.new(sid, weight, session)
         send_window = init_window,
         recv_window = session.preread_size,
         exhausted = false,
-        has_headers = false,
+        end_headers = false,
     }
 
     return setmetatable(stream, mt)

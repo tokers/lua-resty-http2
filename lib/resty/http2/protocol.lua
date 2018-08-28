@@ -7,6 +7,7 @@ local h2_error = require "resty.http2.error"
 
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
+local strerror = h2_error.strerror
 
 local MAX_STREAMS_SETTING = 0x3
 local INIT_WINDOW_SIZE_SETTING = 0x4
@@ -81,6 +82,42 @@ local function check_window(self, stream, hd)
     return true
 end
 
+
+local function data_handler(self, stream, frame)
+    local typ = frame.header.type
+    local ok, code = h2_frame.check[typ](frame, stream)
+    if not ok then
+        local err
+        if code == h2_error.STREAM_CLOSED then
+            ok, err = stream:rst(err)
+        else
+            ok, err = self:close(err)
+        end
+
+        return err or strerror(code)
+    end
+
+    ok, err = check_window(self, stream, frame)
+    if not ok then
+        return nil, err
+    end
+
+    local state = stream.state
+    if state == h2_stream.STATE_OPEN then
+        state = h2_stream.STATE_HALF_CLOSED_REMOTE
+    else
+        state = h2_stream.STATE_CLOSED
+    end
+
+    stream.state = state
+
+    return true
+end
+
+
+local frame_handler = {
+    [h2_frame.DATA_FRAME] = data_handler,
+}
 
 -- create a new http2 session
 function _M.session(recv, send, ctx)
@@ -312,10 +349,9 @@ function _M:want_write()
 end
 
 
--- WINDOW_UPDATE frame will be sent if necessary,
--- and all the frame payload will be read,
--- thereby a proper preread_size is needed,
--- it shoudn't be too large, at leastly.
+-- all the frame payload will be read, thereby a proper preread_size is needed .
+-- note WINDOW_UPDATE, RST_STREAM or GOAWAY frame will be sent automatically
+-- (if necessary).
 function _M:recv_frame()
     local ctx = self.ctx
     local recv = self.recv
@@ -355,17 +391,9 @@ function _M:recv_frame()
 
             h2_frame.unpack[typ](frame, bytes)
 
-            ok, err = h2_frame.check[typ](frame, stream)
+            ok, err = frame_handler(self, stream, frame)
             if not ok then
-                -- TODO takes the corresponding action
                 return nil, err
-            end
-
-            if typ == h2_frame.DATA_FRAME then
-                ok, err = check_window(self, stream, hd)
-                if not ok then
-                    return nil, err
-                end
             end
 
             return frame

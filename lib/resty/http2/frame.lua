@@ -312,6 +312,12 @@ end
 
 
 function headers.unpack(hf, src)
+    local hd = hf.header
+
+    local flag_padded = hd.FLAG_PADDED
+    if flag_padded then
+
+    end
 end
 
 
@@ -424,7 +430,18 @@ end
 
 
 function data.unpack(df, src)
+    local hd = df.header
+    local flag_padded = hd.FLAG_PADDED
+    local pad_length = 0
+    local length = hd.length
 
+    if hd.FLAG_PADDED then
+        pad_length = band(byte(src), 0xff)
+        df.payload = sub(src, 2, 1 + length - pad_length)
+        df.pad = sub(src, 2 + length - pad_length, length)
+    else
+        df.payload = src
+    end
 end
 
 
