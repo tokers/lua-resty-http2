@@ -435,6 +435,12 @@ function headers.unpack(hf, src, stream)
         -- we really don't want to create too many strings,
         -- so the offset is cached.
         cached[#cached + 1] = { src, offset, length }
+
+        debug_log("server sent large headers which cannot be ",
+                  "fitted in a single HEADERS frame")
+
+        session.incomplete_headers = true
+        session.current_sid = sid
     end
 
     return true
@@ -478,6 +484,18 @@ function headers.new(frags, pri, pad, end_stream, sid)
         pad = pad,
         next = nil,
     }
+end
+
+
+function continuation.pack(cf, dst)
+end
+
+
+function continuation.unpack(cf, src, stream)
+end
+
+
+function continuation.new()
 end
 
 
@@ -635,17 +653,26 @@ _M.continuation = continuation
 _M.rst_stream = rst_stream
 _M.data = data
 
-_M.FRAME_NONE = FLAG_NONE
-_M.FRAME_ACK = FLAG_ACK
-_M.FRAME_END_STREAM = FLAG_END_STREAM
-_M.FRAME_END_HEADERS = FLAG_END_HEADERS
-_M.FRAME_PADDED = FLAG_PADDED
-_M.FRAME_PRIORITY = FLAG_PRIORITY
+_M.FLAG_NONE = FLAG_NONE
+_M.FLAG_ACK = FLAG_ACK
+_M.FLAG_END_STREAM = FLAG_END_STREAM
+_M.FLAG_END_HEADERS = FLAG_END_HEADERS
+_M.FLAG_PADDED = FLAG_PADDED
+_M.FLAG_PRIORITY = FLAG_PRIORITY
 
 _M.MAX_WINDOW = MAX_WINDOW
 _M.HEADER_SIZE = HEADER_SIZE
 
 _M.DATA_FRAME = DATA_FRAME
+_M.HEADERS_FRAME = HEADERS_FRAME
+_M.PRIORITY_FRAME = PRIORITY_FRAME
+_M.RST_STREAM_FRAME = RST_STREAM_FRAME
+_M.SETTINGS_FRAME = SETTINGS_FRAME
+_M.PUSH_PROMISE_FRAME = PUSH_PROMISE_FRAME
+_M.PING_FRAME = PING_FRAME
+_M.GOAWAY_FRAME = GOAWAY_FRAME
+_M.WINDOW_UPDATE_FRAME = WINDOW_UPDATE_FRAME
+_M.CONTINUATION_FRAME = CONTINUATION_FRAME
 _M.MAX_FREAME_ID = 0x9
 
 _M.pack = {

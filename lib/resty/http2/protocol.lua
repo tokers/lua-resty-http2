@@ -59,6 +59,9 @@ function _M.session(recv, send, ctx)
 
         goaway_sent = false,
         goaway_received = false,
+        incomplete_headers = false,
+
+        current_sid = nil,
 
         output_queue = nil,
         output_queue_size = 0,
@@ -269,6 +272,7 @@ function _M:recv_frame()
         return nil, err
     end
 
+    local incomplete_headers = self.incomplete_headers
     local frame
     local ok
 
@@ -294,6 +298,13 @@ function _M:recv_frame()
                 goto continue
             end
 
+            if incomplete_headers then
+                local current_sid = self.current_sid
+                if typ ~= h2_frame.CONTINUATION_FRAME or current_sid ~= sid then
+                    return handle_error(self, stream, h2_error.PROTOCOL_ERROR)
+                end
+            end
+
             stream = stream or self.root
 
             frame = new_tab(0, h2_frame.sizeof[typ])
@@ -305,6 +316,9 @@ function _M:recv_frame()
             end
 
             return frame
+
+        elseif incomplete_headers then
+            return handle_error(self, nil, h2_error.PROTOCOL_ERROR)
         end
 
         ::continue::
@@ -317,7 +331,7 @@ function _M:close(code, debug_data)
         return true
     end
 
-    code = code or h2_error.protocol.NO_ERROR
+    code = code or h2_error.NO_ERROR
 
     local frame = h2_frame.goaway.new(self.last_stream_id, code, debug_data)
     self:frame_queue(frame)
