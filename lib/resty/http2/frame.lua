@@ -17,6 +17,7 @@ local pack_u16 = util.pack_u16
 local unpack_u16 = util.unpack_u16
 local pack_u32 = util.pack_u32
 local unpack_u32 = util.unpack_u32
+local new_buffer = util.new_buffer
 
 local WINDOW_UPDATE_PAYLOAD_SIZE = 4
 local MAX_WINDOW = h2_stream.MAX_WINDOW
@@ -406,13 +407,6 @@ function headers.unpack(hf, src, stream)
     -- XXX don't have a good way to estimate a proper size
     hf.block_frags = new_tab(0, 8)
 
-    -- just skip the incompleting decode operation
-    -- if we don't receive the whole headers (it's rare),
-    -- that makes the hpack codes simple. :)
-    if hd.flag_end_headers then
-        return session.hpack:decode(src, offset, length, hf.block_frags)
-    end
-
     local cached = session.hpack.cached
     if not cached then
         cached = new_tab(2, 0)
@@ -421,10 +415,17 @@ function headers.unpack(hf, src, stream)
 
     -- we really don't want to create too many strings,
     -- so the offset is cached.
-    cached[#cached + 1] = { src, offset, length }
+    cached[#cached + 1] = new_buffer(src, offset, offset + length)
+
+    -- just skip the incompleting decode operation
+    -- if we don't receive the whole headers (it's rare),
+    -- that makes the hpack codes simple. :)
+    if hd.flag_end_headers then
+        return session.hpack:decode(hf.block_frags)
+    end
 
     debug_log("server sent large headers which cannot be ",
-    "fitted in a single HEADERS frame")
+              "fitted in a single HEADERS frame")
 
     session.incomplete_headers = true
     session.current_sid = sid
@@ -478,17 +479,17 @@ function continuation.unpack(cf, src, stream)
         return nil, h2_error.PROTOCOL_ERROR
     end
 
+    local cached = session.hpack.cached
+    cached[#cached + 1] = new_buffer(src, 1, #src + 1)
+
     if cf.header.flag_end_headers then
         session.incomplete_headers = false
         session.current_sid = -1
 
         -- XXX don't have a good way to estimate a proper size
         cf.block_frags = new_tab(0, 4)
-        return session.hpack:decode(src, 0, cf.block_frags)
+        return session.hpack:decode(cf.block_frags)
     end
-
-    local cached = session.hpack.cached
-    cached[#cached + 1] = { src, 0 }
 
     return true
 end
