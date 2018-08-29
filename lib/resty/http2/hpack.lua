@@ -8,6 +8,7 @@ local bor = bit.bor
 local brshift = bit.rshift
 local band = bit.band
 local char = string.char
+local byte = string.byte
 local concat = table.concat
 local setmetatable = setmetatable
 local new_tab = util.new_tab

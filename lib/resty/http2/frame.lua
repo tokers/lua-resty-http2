@@ -424,25 +424,24 @@ function headers.unpack(hf, src, stream)
     -- if we don't receive the whole headers (it's rare),
     -- that makes the hpack codes simple. :)
     if hd.flag_end_headers then
-        session.hpack:decode(src, offset, length, hf.block_frags)
-    else
-        local cached = session.hpack.cached
-        if not cached then
-            cached = new_tab(2, 0)
-            session.hpack.cached = cached
-        end
-
-        -- we really don't want to create too many strings,
-        -- so the offset is cached.
-        cached[#cached + 1] = { src, offset, length }
-
-        debug_log("server sent large headers which cannot be ",
-                  "fitted in a single HEADERS frame")
-
-        session.incomplete_headers = true
-        session.current_sid = sid
+        return session.hpack:decode(src, offset, length, hf.block_frags)
     end
 
+    local cached = session.hpack.cached
+    if not cached then
+        cached = new_tab(2, 0)
+        session.hpack.cached = cached
+    end
+
+    -- we really don't want to create too many strings,
+    -- so the offset is cached.
+    cached[#cached + 1] = { src, offset, length }
+
+    debug_log("server sent large headers which cannot be ",
+    "fitted in a single HEADERS frame")
+
+    session.incomplete_headers = true
+    session.current_sid = sid
     return true
 end
 
@@ -456,19 +455,11 @@ function headers.new(frags, pri, pad, end_stream, sid)
     end
 
     if pri then
-        if sid == pri.sid then
-            return nil, "stream cannont be self dependency"
-        end
-
         flags = bor(flags, FLAG_PRIORITY)
     end
 
     -- basically we don't use this but still we should respect it
     if pad then
-        if #pad > 255 then
-            return nil, "invalid pad length"
-        end
-
         flags = bor(flags, FLAG_PADDED)
         payload_length = payload_length + #pad
     end
@@ -488,14 +479,50 @@ end
 
 
 function continuation.pack(cf, dst)
+    header.pack(cf, dst)
+    dst[#dst + 1] = cf.block_frags
 end
 
 
 function continuation.unpack(cf, src, stream)
+    local session = stream.session
+
+    if not session.incomplete_headers then
+        debug_log("server sent unexpected CONTINUATION frame")
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    if cf.header.flag_end_headers then
+        session.incomplete_headers = false
+        session.current_sid = -1
+
+        -- XXX don't have a good way to estimate a proper size
+        cf.block_frags = new_tab(0, 4)
+        return session.hpack:decode(src, 0, cf.block_frags)
+    end
+
+    local cached = session.hpack.cached
+    cached[#cached + 1] = { src, 0 }
+
+    return true
 end
 
 
-function continuation.new()
+function continuation.new(frags, end_headers, sid)
+    local payload_length = #frags
+    local flags = FLAG_NONE
+
+    if end_headers then
+        flags = bor(flags, FLAG_END_HEADERS)
+    end
+
+    local hd = header.new(payload_length, CONTINUATION_FRAME, flags, sid)
+
+    return {
+        header = hd,
+        block_frags = frags,
+        next = nil,
+    }
 end
 
 
@@ -684,6 +711,7 @@ _M.pack = {
     [PING_FRAME] = ping.pack,
     [GOAWAY_FRAME] = goaway.pack,
     [WINDOW_UPDATE_FRAME] = window_update.pack,
+    [CONTINUATION_FRAME] = continuation.pack,
 }
 
 
@@ -696,6 +724,7 @@ _M.unpack = {
     [PING_FRAME] = ping.unpack,
     [GOAWAY_FRAME] = goaway.unpack,
     [WINDOW_UPDATE_FRAME] = window_update.unpack,
+    [CONTINUATION_FRAME] = continuation.pack,
 }
 
 _M.sizeof = {
@@ -707,6 +736,7 @@ _M.sizeof = {
     [PING_FRAME] = 4,
     [GOAWAY_FRAME] = 5,
     [WINDOW_UPDATE_FRAME] = 3,
+    [CONTINUATION_FRAME] = 3,
 }
 
 
