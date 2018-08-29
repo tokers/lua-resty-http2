@@ -23,6 +23,13 @@ local mt = { __index = _M }
 
 
 local function handle_error(self, stream, error_code)
+    if h2_error.is_stream_error(error_code) then
+        stream:rst(error_code)
+    else
+        self:close(error_code)
+    end
+
+    return nil, h2_error.strerror(error_code)
 end
 
 
@@ -328,13 +335,11 @@ end
 
 function _M:close(code, debug_data)
     if self.goaway_sent then
-        return true
+        return
     end
 
     code = code or h2_error.NO_ERROR
 
     local frame = h2_frame.goaway.new(self.last_stream_id, code, debug_data)
     self:frame_queue(frame)
-
-    return self:flush_queue()
 end

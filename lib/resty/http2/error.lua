@@ -43,16 +43,12 @@ local error_map = {
 
 
 function _M.strerror(code)
-    return error_map[code]
+    return error_map[code] or "unknown error"
 end
 
 
 function _M.is_stream_error(code)
-    if code < 0 then
-        return true
-    end
-
-    return code == REFUSED_STREAM or code == STREAM_CLOSED
+    return code < 0 or code == REFUSED_STREAM or code == STREAM_CLOSED
 end
 
 

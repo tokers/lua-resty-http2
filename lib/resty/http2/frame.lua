@@ -160,10 +160,6 @@ end
 
 
 function rst.new(error_code, sid)
-    if sid == 0x0 then
-        return nil, "invalid stream id"
-    end
-
     local hd = header.new(4, RST_STREAM_FRAME, FLAG_NONE, sid)
 
     return {
@@ -200,13 +196,7 @@ end
 
 
 function settings.new(sid, flags, payload)
-    local count = #payload
-
-    if band(flags, FLAG_ACK) and count > 0 then
-        return nil, "settings frame with ACK flag cannot take payloads"
-    end
-
-    local hd = header.new(6 * count, SETTINGS_FRAME, flags, sid)
+    local hd = header.new(6 * #payload, SETTINGS_FRAME, flags, sid)
 
     return {
         header = hd,
@@ -277,10 +267,6 @@ end
 
 
 function window_update.new(sid, window)
-    if window < 1 or window > MAX_WINDOW then
-        return nil, "invalid window size"
-    end
-
     local hd = header.new(WINDOW_UPDATE_PAYLOAD_SIZE, WINDOW_UPDATE_FRAME,
                           FLAG_NONE, sid)
     return {
@@ -652,19 +638,12 @@ function data.new(payload, pad, last, sid)
 
     local hd = header.new(#payload + pad_length, DATA_FRAME, flags, sid)
 
-    local df = {
+    return {
         header = hd,
         pad = pad,
         payload = payload,
         next = nil,
     }
-
-    local ok, err = data.check(df)
-    if not ok then
-        return nil, err
-    end
-
-    return df
 end
 
 

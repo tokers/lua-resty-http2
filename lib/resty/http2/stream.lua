@@ -296,13 +296,10 @@ function _M:rst(code)
     code = code or h2_error.protocol.NO_ERROR
     local state = self.state
     if state == STATE_IDLE or state == STATE_CLOSED then
-        return nil, "invalid stream state"
+        return
     end
 
-    local frame, err = h2_frame.rst.new(code, self.sid)
-    if not frame then
-        return nil, err
-    end
+    local frame = h2_frame.rst.new(code, self.sid)
 
     self.session:frame_queue(frame)
 
@@ -310,7 +307,6 @@ function _M:rst(code)
     -- maybe it is improper and shoule be postponed
     -- until the frame was reall sent.
     self.state = STATE_CLOSED
-    return true
 end
 
 
