@@ -123,7 +123,21 @@ function priority.pack(pf, dst)
 end
 
 
-function priority.unpack(pf, src)
+function priority.unpack(pf, src, stream)
+    local sid = stream.sid
+    if sid == 0x0 then
+        debug_log("server sent PRIORITY frame with incorrect ",
+                  "stream idenitifier: 0x0")
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local payload_length = pf.header.length
+    if payload_length ~= 5 then
+        debug_log("server sent PRIORITY frame with incorrect payload length: ",
+                  payload_length)
+        return nil, h2_error.STREAM_FRAME_SIZE_ERROR
+    end
+
     local b1, b2, b3, b4, b5 = byte(src, 1, 5)
 
     if b1 > 127 then
@@ -134,8 +148,28 @@ function priority.unpack(pf, src)
         pf.excl = 0
     end
 
-    pf.depend = unpack_u32(b1, b2, b3, b4)
-    pf.weight = b5
+    local depend = unpack_u32(b1, b2, b3, b4)
+    local weight = b5
+
+    if depend == sid then
+        debug_log("server sent PRIORITY frame with incorrect dependent stream: ",
+                  depend)
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local session = stream.session
+
+    local depend_stream = session.streams_map[depend]
+    if not depend_stream then -- not in the dependency tree
+        depend_stream = h2_stream.new(sid, h2_stream.DEFAULT_WEIGHT, session)
+    end
+
+    pf.weight = weight
+    pf.depend = depend
+
+    stream:set_dependency(depend_stream, pf.excl)
+
+    return true
 end
 
 
@@ -381,7 +415,15 @@ function headers.unpack(hf, src, stream)
         end
 
         stream.weight = weight
-        stream:set_dependency(session.streams_map[depend], excl)
+
+        local depend_stream = session.streams_map[depend]
+        if not depend_stream then
+            -- not in the dependency tree
+            depend_stream = h2_stream.new(depend, h2_stream.DEFAULT_WEIGHT,
+                                          session)
+        end
+
+        stream:set_dependency(depend_stream, excl)
     end
 
     if hd.FLAG_END_STREAM then

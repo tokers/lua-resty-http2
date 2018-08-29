@@ -329,32 +329,47 @@ end
 
 
 function _M.new(sid, weight, session)
-    if not session then
-        return nil, "orphan stream is banned"
-    end
-
     weight = weight or _M.DEFAULT_WEIGHT
+
+    local streams_map = session.streams_map
+    local stream = streams_map[sid]
 
     local init_window = session.init_window
 
-    local stream = {
-        sid = sid,
-        state = _M.STATE_IDLE,
-        data = new_tab(1, 0),
-        parent = nil,
-        next_sibling = nil,
-        last_sibling = nil,
-        child = nil, -- the first child
-        weight = weight,
-        rel_weight = -1,
-        rank = -1,
-        opaque_data = nil, -- user private data
-        session = session, -- the session
-        init_window = init_window,
-        send_window = init_window,
-        recv_window = session.preread_size,
-        exhausted = false,
-    }
+    if not stream then
+        stream = {
+            sid = sid,
+            state = _M.STATE_IDLE,
+            data = new_tab(1, 0),
+            parent = session.root,
+            next_sibling = nil,
+            last_sibling = nil,
+            child = nil, -- the first child
+            weight = weight,
+            rel_weight = -1,
+            rank = -1,
+            opaque_data = nil, -- user private data
+            session = session, -- the session
+            init_window = init_window,
+            send_window = init_window,
+            recv_window = session.preread_size,
+            exhausted = false,
+        }
+
+    else
+        -- since the stream dependencies, the stream maybe created early
+        stream.init_window = init_window
+        stream.data = new_tab(1, 0)
+        stream.init_window = init_window
+        stream.send_window = init_window
+        stream.recv_window = session.preread_size
+        stream.exhausted = false
+
+        if weight ~= stream.weight then
+            stream.weight = weight
+            children_update(stream)
+        end
+    end
 
     return setmetatable(stream, mt)
 end

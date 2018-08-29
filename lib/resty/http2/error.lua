@@ -20,6 +20,7 @@ local HTTP_1_1_REQUIRED = 0xd
 -- we use negative codes to represent the some stream-level errors
 local STREAM_PROTOCOL_ERROR = -PROTOCOL_ERROR
 local STREAM_FLOW_CONTROL_ERROR = -FLOW_CONTROL_ERROR
+local STREAM_FRAME_SIZE_ERROR = -FRAME_SIZE_ERROR
 
 local error_map = {
     [NO_ERROR] = "no error",
@@ -37,6 +38,7 @@ local error_map = {
     [INADEQUATE_SECURITY] = "inadequate security",
     [HTTP_1_1_REQUIRED] = "http/1.1 required",
 
+    [STREAM_FRAME_SIZE_ERROR] = "frame size error (stream level)",
     [STREAM_PROTOCOL_ERROR] = "protocol error (stream level)",
     [STREAM_FLOW_CONTROL_ERROR] = "flow control error (stream level)",
 }
