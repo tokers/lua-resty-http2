@@ -3,28 +3,34 @@
 local bit = require "bit"
 local util = require "resty.http2.util"
 local huffenc = require "resty.http2.huff_encode"
+local huffdec = require "resty.http2.huff_decode"
+local h2_error = require "resty.http2.error"
 
 local bor = bit.bor
 local brshift = bit.rshift
+local blshift = bit.lshift
 local band = bit.band
 local char = string.char
+local sub = string.sub
 local byte = string.byte
 local concat = table.concat
+local floor = math.floor
 local setmetatable = setmetatable
 local new_tab = util.new_tab
+local debug_log = util.debug_log
+
 local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
 
--- (127 + (1 << (4 - 1) * 7) - 1)
-local MAX_FIELD = 182
 local MAX_TABLE_SIZE = 4096
 local ENTRY_SLOTS = 64
 local ENCODE_HUFF = 0x80
 local ENCODE_RAW = 0x0
 
-local HPACK_AGAIN = 0
-local HPACK_ERROR = 1
-local HPACK_DONE = 2
+local HPACK_INDEXED = 0
+local HPACK_INCR_INDEXING = 1
+local HPACK_WITHOUT_INDEXING = 2
+local HPACK_NEVER_INDEXED = 3
 
 local hpack_static_table = {
     { name = ":authority", value = "" },
@@ -158,6 +164,159 @@ local function table_account(hpack, size)
 end
 
 
+local function parse_int(buffer, current, prefix)
+    local value = band(current, prefix)
+    if value ~= prefix then
+        return value
+    end
+
+    local count = 0
+
+    value = 0
+
+    while true do
+        if buffer.pos == buffer.last then
+            buffer = buffer.next
+            if not buffer then
+                debug_log("server sent header block with incorrect length")
+                return
+            end
+        end
+
+        local pos = buffer.pos
+        local b = band(byte(buffer.data, pos, pos), 0xff)
+        buffer.pos = pos + 1
+
+        value = blshift(value, 7) + band(b, 0x7f)
+
+        if b < 128 then
+            return value
+        end
+
+        count = count + 1
+
+        -- length is too large
+        if count > 4 then
+            debug_log("server sent header block with too long length")
+            return
+        end
+    end
+end
+
+
+local function parse_raw(buffer, length)
+    local data = new_tab(2, 0)
+    while length > 0 do
+        if not buffer then
+            break
+        end
+
+        local pos = buffer.pos
+        local last = buffer.last
+        local size = last - pos
+        if size >= length then
+            data[#data + 1] = sub(buffer.data, pos, pos + length - 1)
+            buffer.pos = pos + length
+            break
+        end
+
+        -- size < length
+        if pos == 1 then
+            data[#data + 1] = buffer.data
+        else
+            data[#data + 1] = sub(buffer.data, pos, last - 1)
+        end
+
+        buffer = buffer.next
+    end
+
+    if length > 0 then
+        debug_log("server sent incomplet header block")
+        return
+    end
+
+    return concat(data)
+end
+
+
+local function parse_huff(hpack, buffer, length)
+    local data = new_tab(floor(length / 8 * 5) + 1, 0)
+
+    while true do
+        if not buffer then
+            break
+        end
+
+        local pos = buffer.pos
+        local last = buffer.last
+        local size = last - pos
+        if size >= length then
+            local src = sub(buffer.data, pos, pos + length - 1)
+            buffer.pos = pos + length
+
+            local ok, err = hpack.decode_state:decode(src, data, true)
+            if not ok then
+                debug_log("hpack huffman decoding error: ", err)
+                return
+            end
+
+            return concat(data)
+        end
+
+        local src
+        if pos == 1 then
+            src = buffer.data
+        else
+            src = sub(buffer.data, pos, pos + size - 1)
+        end
+
+        buffer = buffer.next
+
+        local ok, err = hpack.decode_state:decode(src, data, false)
+        if not ok then
+            debug_log("hpack huffman decoding error: ", err)
+            return
+        end
+    end
+
+    if length > 0 then
+        debug_log("server sent incomplet header block")
+        return
+    end
+
+    return concat(data)
+end
+
+
+local function parse_value(hpack, buffer)
+    if buffer.pos == buffer.last then
+        buffer = buffer.next
+        if not buffer then
+            debug_log("server sent incomplete header block")
+            return
+        end
+    end
+
+    local pos = buffer.pos
+    local ch = band(byte(buffer.data, pos, pos), 0xff)
+    buffer.pos = pos + 1
+
+    local huff = ch >= 128
+    local value = parse_int(buffer, ch, 127)
+    if not value then
+        return
+    end
+
+    debug_log("string length: ", value, " huff: ", huff)
+
+    if not huff then
+        return parse_raw(buffer, value)
+    end
+
+    return parse_huff(hpack, buffer, value)
+end
+
+
 local function write_length(preface, prefix, value, dst)
     if value < prefix then
         dst[#dst + 1] = char(bor(preface, value))
@@ -192,6 +351,8 @@ function _M.new(size)
         static = hpack_static_table,
         dynamic = dynamic,
         cached = nil,
+        last_cache = nil,
+        decode_state = huffdec.new_state(),
     }, mt)
 end
 
@@ -266,7 +427,8 @@ end
 
 function _M:resize(new_size)
     if new_size > MAX_TABLE_SIZE then
-        return false
+        debug_log("server sent header block with too long size update value")
+        return
     end
 
     local dynamic = self.dynamic
@@ -287,22 +449,103 @@ function _M:resize(new_size)
     dynamic.front = front
     dynamic.size = new_size
     dynamic.free = new_size - cost
+
+    return true
 end
 
 
-function _M:decode(src, pos, dst)
-    local len = #src
-
-    while pos <= len do
-        local b = band(byte(src, pos, pos), 0xff)
-        pos = pos + 1
+function _M:decode(dst)
+    local buffer = self.cached
+    if not buffer then
+        return true
     end
+
+    local index_type
+    local size_update = false
+    local prefix
+
+    while true do
+        if buffer.pos == buffer.last then
+            break
+        end
+
+        local ch = band(byte(buffer.data, buffer.pos), 0xff)
+        buffer.pos = buffer.pos + 1
+
+        if ch >= 128 then -- indexed header field
+            prefix = 127
+            index_type = HPACK_INDEXED
+
+        elseif ch >= 64 then -- literal header field with incremental indexing
+            prefix = 63
+            index_type = HPACK_INCR_INDEXING
+
+        elseif ch >= 32 then -- dynamic table size update
+            prefix = 31
+            size_update = true
+
+        elseif ch >= 16 then -- literal header field never indexed
+            prefix = 15
+            index_type = HPACK_NEVER_INDEXED
+
+        else
+            prefix = 15
+            index_type = HPACK_WITHOUT_INDEXING
+        end
+
+        local value = parse_int(buffer, ch, prefix)
+        if not value then
+            return nil, h2_error.COMPRESSION_ERROR
+        end
+
+        if index_type == HPACK_INDEXED then
+            local entry = self:get_indexed_header(value)
+            if not entry then
+                return nil, h2_error.COMPRESSION_ERROR
+            end
+
+            dst[entry.name] = entry.value
+
+        elseif size_update then
+            if not self:resize(value) then
+                return nil, h2_error.COMPRESSION_ERROR
+            end
+        end
+
+        local header_name
+        local header_value
+
+        if value > 0 then
+            local entry = self:get_indexed_header(value)
+            if not entry then
+                return nil, h2_error.COMPRESSION_ERROR
+            end
+
+            header_name = entry.name
+
+        else
+            header_name = parse_value(self, buffer)
+            if not header_name then
+                return nil, h2_error.COMPRESSION_ERROR
+            end
+        end
+
+        header_value = parse_value(self, buffer)
+        if not header_value then
+            return nil, h2_error.COMPRESSION_ERROR
+        end
+
+        dst[header_name] = header_value
+    end
+
+    return true
 end
 
 
 function _M:get_indexed_header(raw_index)
     if raw_index <= 0 then
-        return nil, "invalid hpack table index " .. raw_index
+        debug_log("server sent invalid hpack table index ", raw_index)
+        return
     end
 
     local static = self.static
@@ -315,14 +558,16 @@ function _M:get_indexed_header(raw_index)
     local back = dynamic.back
 
     if back == 0 then
-        return nil, "invalid hpack table index " .. raw_index
+        debug_log("server sent invalid hpack table index ", raw_index)
+        return
     end
 
     local index = raw_index - #self.static
 
     if back >= front then
         if back - front + 1 < index then
-            return nil, "invalid hpack table index " .. raw_index
+            debug_log("server sent invalid hpack table index ", raw_index)
+            return
         end
 
         return dynamic.entries[back - index + 1]
@@ -330,7 +575,8 @@ function _M:get_indexed_header(raw_index)
 
     local count = back + dynamic.slots - front + 1
     if count < index then
-        return nil, "invalid hpack table index " .. raw_index
+        debug_log("server sent invalid hpack table index ", raw_index)
+        return
     end
 
     if index <= back then

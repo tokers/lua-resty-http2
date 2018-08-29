@@ -18,6 +18,7 @@ local unpack_u16 = util.unpack_u16
 local pack_u32 = util.pack_u32
 local unpack_u32 = util.unpack_u32
 local new_buffer = util.new_buffer
+local debug_log = util.debug_log
 
 local WINDOW_UPDATE_PAYLOAD_SIZE = 4
 local MAX_WINDOW = h2_stream.MAX_WINDOW
@@ -56,17 +57,6 @@ local headers = {} -- headers frame
 local continuation = {} -- continuation frame
 local rst_stream = {} -- rst_stream frame
 local data = {} -- data frame
-
-local ngx_log = ngx.log
-local DEBUG = ngx.DEBUG
-local debug_log
-
-if ngx.config.debug then
-    debug_log = function(...) ngx_log(DEBUG, ...) end
-else
-    debug_log = function() end
-end
-
 
 function header.new(length, typ, flags, id)
     local flag_ack = band(flags, FLAG_ACK) ~= 0
@@ -404,23 +394,24 @@ function headers.unpack(hf, src, stream)
         end
     end
 
-    -- XXX don't have a good way to estimate a proper size
-    hf.block_frags = new_tab(0, 8)
-
-    local cached = session.hpack.cached
-    if not cached then
-        cached = new_tab(2, 0)
-        session.hpack.cached = cached
+    if length > 0 then
+        local buffer = new_buffer(src, offset, offset + length)
+        local cached = session.hpack.cached
+        if not cached then
+            session.hpack.cached = buffer
+            session.hpack.last_cache = buffer
+        else
+            session.hpack.last_cache.next = buffer
+            session.hpack.last_cache = buffer
+        end
     end
-
-    -- we really don't want to create too many strings,
-    -- so the offset is cached.
-    cached[#cached + 1] = new_buffer(src, offset, offset + length)
 
     -- just skip the incompleting decode operation
     -- if we don't receive the whole headers (it's rare),
     -- that makes the hpack codes simple. :)
     if hd.flag_end_headers then
+        -- XXX don't have a good way to estimate a proper size
+        hf.block_frags = new_tab(0, 8)
         return session.hpack:decode(hf.block_frags)
     end
 
@@ -479,8 +470,11 @@ function continuation.unpack(cf, src, stream)
         return nil, h2_error.PROTOCOL_ERROR
     end
 
-    local cached = session.hpack.cached
-    cached[#cached + 1] = new_buffer(src, 1, #src + 1)
+    if #src > 0 then
+        local buffer = new_buffer(src, 1, #src + 1)
+        session.hpack.last_cache.next = buffer
+        session.hpack.last_cache = buffer
+    end
 
     if cf.header.flag_end_headers then
         session.incomplete_headers = false

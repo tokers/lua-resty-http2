@@ -10,8 +10,19 @@ local blshift = bit.lshift
 local brshift = bit.rshift
 local char = string.char
 local type = type
+local ngx_log = ngx.log
+local DEBUG = ngx.DEBUG
+local debug_log
 
 local _M = { _VERSION = "0.1" }
+
+
+if ngx.config.debug then
+    debug_log = function(...) ngx_log(DEBUG, ...) end
+else
+    debug_log = function() end
+end
+_M.debug_log = debug_log
 
 
 local ok, new_tab = pcall(require, "table.new")
@@ -79,6 +90,7 @@ function _M.new_buffer(data, pos, last)
         data = data,
         pos = pos,
         last = last,
+        next = nil,
     }
 end
 
