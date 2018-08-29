@@ -227,7 +227,6 @@ function _M:submit_request(headers, no_body, priority, pad)
         return nil, err
     end
 
-    self.stream_map[sid] = stream
     self.total_streams = total + 1
     self.idle_streams = self.idle_streams + 1
 
@@ -299,10 +298,16 @@ function _M:recv_frame()
             end
 
             local sid = hd.sid
-            local stream = self.stream_map[hd.sid]
+            local stream = self.stream_map[sid]
             if sid > 0x0 and not stream then
-                -- unknown HTTP/2 stream, just skip the payload
-                goto continue
+                -- idle stream
+                if typ ~= h2_frame.HEADERS_FRAME and
+                   typ ~= h2_frame.PUSH_PROMISE_FREAM
+                then
+                    return handle_error(self, nil, h2_error.PROTOCOL_ERROR)
+                end
+
+                stream = h2_stream.new(sid, h2_stream.DEFAULT_WEIGHT, self)
             end
 
             if incomplete_headers then
@@ -311,8 +316,6 @@ function _M:recv_frame()
                     return handle_error(self, stream, h2_error.PROTOCOL_ERROR)
                 end
             end
-
-            stream = stream or self.root
 
             frame = new_tab(0, h2_frame.sizeof[typ])
             frame.header = hd
@@ -327,8 +330,6 @@ function _M:recv_frame()
         elseif incomplete_headers then
             return handle_error(self, nil, h2_error.PROTOCOL_ERROR)
         end
-
-        ::continue::
     end
 end
 

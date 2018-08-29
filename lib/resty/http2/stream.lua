@@ -331,8 +331,8 @@ end
 function _M.new(sid, weight, session)
     weight = weight or _M.DEFAULT_WEIGHT
 
-    local streams_map = session.streams_map
-    local stream = streams_map[sid]
+    local stream_map = session.stream_map
+    local stream = stream_map[sid]
 
     local init_window = session.init_window
 
@@ -346,7 +346,7 @@ function _M.new(sid, weight, session)
             last_sibling = nil,
             child = nil, -- the first child
             weight = weight,
-            rel_weight = -1,
+            rel_weight = weight / _M.MAX_WEIGHT,
             rank = -1,
             opaque_data = nil, -- user private data
             session = session, -- the session
@@ -355,6 +355,8 @@ function _M.new(sid, weight, session)
             recv_window = session.preread_size,
             exhausted = false,
         }
+
+        stream_map[sid] = stream
 
     else
         -- since the stream dependencies, the stream maybe created early

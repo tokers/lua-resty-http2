@@ -114,7 +114,7 @@ function priority.pack(pf, dst)
     local weight = pf.weight
 
     if excl then
-        depend = bor(depend, 0x7fffffff)
+        depend = bor(depend, blshift(1, 31))
     end
 
     pack_u32(depend, dst)
@@ -159,7 +159,7 @@ function priority.unpack(pf, src, stream)
 
     local session = stream.session
 
-    local depend_stream = session.streams_map[depend]
+    local depend_stream = session.stream_map[depend]
     if not depend_stream then -- not in the dependency tree
         depend_stream = h2_stream.new(sid, h2_stream.DEFAULT_WEIGHT, session)
     end
@@ -179,8 +179,31 @@ function rst.pack(rf, dst)
 end
 
 
-function rst.unpack(rf, src)
+function rst.unpack(rf, src, stream)
+    local sid = rf.header.sid
+    if sid == 0x0 then
+        debug_log("server sent RST_STREAM frame with ",
+                  "incorrect stream identifier: 0x0")
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local state = stream.state
+    if state == h2_stream.STATE_IDLE then
+        debug_log("server sent RST_STREAM frame for stream: ", sid,
+                  " with invalid state")
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local length = rf.header.length
+    if length ~= 4 then
+        debug_log("server sent RST_STREAM frame with incorrect payload length ",
+                  length)
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
     rf.error_code = unpack_u32(byte(src, 1, 4))
+
+    return true
 end
 
 
@@ -416,7 +439,7 @@ function headers.unpack(hf, src, stream)
 
         stream.weight = weight
 
-        local depend_stream = session.streams_map[depend]
+        local depend_stream = session.stream_map[depend]
         if not depend_stream then
             -- not in the dependency tree
             depend_stream = h2_stream.new(depend, h2_stream.DEFAULT_WEIGHT,
