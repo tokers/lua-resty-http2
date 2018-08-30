@@ -275,11 +275,11 @@ end
 function _M:submit_data(data, pad, last)
     local state = self.state
     if state ~= STATE_OPEN and state ~= STATE_HALF_CLOSED_REMOTE then
-        return nil, h2_error.INVALID_STREAM_STATE
+        return nil, "invalid stream state"
     end
 
     if self.exhausted then
-        return nil, h2_error.FLOW_EXHAUSTED
+        return nil, "stream send window exhausted"
     end
 
     local frame, err = h2_frame.data.new(data, pad, last, self.sid)

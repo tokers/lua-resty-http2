@@ -288,7 +288,13 @@ function settings.unpack(sf, src, stream)
                 return nil, h2_error.FRAME_SIZE_ERROR
             end
 
-            session.init_window = value
+            local init_window = session.init_window
+            if init_window ~= value then
+                session.init_window = value
+                if not session:adjust_window(value - init_window) then
+                    return nil, h2_error.INTERNAL_ERROR
+                end
+            end
 
         elseif id == SETTINGS_MAX_CONCURRENT_STREAMS then
             session.max_stream = value
@@ -421,8 +427,66 @@ function window_update.pack(wf, dst)
 end
 
 
-function window_update.unpack(wf, src)
-    wf.window_size_increment = band(unpack_u32(byte(src, 1, 4)), 0x7fffffff)
+function window_update.unpack(wf, src, stream)
+    local payload_length = wf.header.length
+    if payload_length ~= 4 then
+        debug_log("server sent WINDOW_UPDATE frame with ",
+                  "incorrect payload length: ", payload_length)
+        return nil, h2_error.FRAME_SIZE_ERROR
+    end
+
+    local sid = stream.sid
+    local incr = band(unpack_u32(byte(src, 1, 4)), 0x7fffffff)
+
+    if incr == 0 then
+        if sid == 0x0 then
+            debug_log("server sent WINDOW_UPDATE frame for the ",
+                      "whole connection with invalid window increment: 0")
+            return nil, h2_error.PROTOCOL_ERROR
+        end
+
+        debug_log("server sent WINDOW_UPDATE frame for stream ", sid,
+                  " with invalid window increment: 0")
+        return nil, h2_error.STREAM_PROTOCOL_ERROR
+    end
+
+    wf.window_size_increment = incr
+
+    local send_window
+    if sid == 0x0 then
+        send_window = stream.session.send_window
+    else
+        send_window = stream.send_window
+    end
+
+    if stream.state == h2_stream.STATE_IDLE then
+        return true
+    end
+
+    if incr > MAX_WINDOW - send_window then
+        if sid == 0 then
+            debug_log("server volatiled connection flow control: ",
+                      "received WINDOW_UPDATE frame with window increment: ",
+                      incr, ", which is not allowed for window ", send_window)
+            return nil, h2_error.FLOW_CONTROL_ERROR
+        end
+
+        debug_log("server volatiled flow control for stream ", sid,
+                  " received WINDOW_UPDATE frame with window increment: ", incr,
+                  " which is not allowed for window ", send_window)
+        return nil, h2_error.STREAM_FLOW_CONTROL_ERROR
+    end
+
+    if sid ~= 0x0 then
+        stream.send_window = send_window + incr
+        if stream.send_window > 0 and stream.exhausted then
+            stream.exhausted = false
+        end
+    else
+        stream.session.send_window = send_window + incr
+    end
+
+    return true
 end
 
 

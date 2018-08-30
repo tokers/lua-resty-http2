@@ -5,8 +5,10 @@ local h2_frame = require "resty.http2.frame"
 local h2_stream = require "resty.http2.stream"
 local h2_error = require "resty.http2.error"
 
+local pairs = pairs
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
+local debug_log = util.debug_log
 
 local MAX_STREAMS_SETTING = h2_frame.SETTINGS_MAX_CONCURRENT_STREAMS
 local INIT_WINDOW_SIZE_SETTING = h2_frame.SETTINGS_INITIAL_WINDOW_SIZE
@@ -117,6 +119,28 @@ function _M:init(preread_size, max_concurrent_stream)
     self:frame_queue(wf)
 
     return self:flush_queue()
+end
+
+
+function _M:adjust_window(delta)
+    local max_window = h2_stream.MAX_WINDOW
+    for _, stream in pairs(self.stream_map) do
+        local send_window = stream.send_window
+        if delta > 0 and send_window > max_window - delta then
+            stream:rst(h2_error.FLOW_CONTROL_ERROR)
+            return
+        end
+
+        stream.send_window = send_window + delta
+        if stream.send_window > 0 and stream.exhausted then
+            stream.exhausted = false
+
+        elseif stream.send_window < 0 then
+            stream.exhausted = true
+        end
+    end
+
+    return true
 end
 
 
@@ -339,6 +363,9 @@ function _M:close(code, debug_data)
 
     code = code or h2_error.NO_ERROR
 
-    local frame = h2_frame.goaway.new(self.last_stream_id, code, debug_data)
+    debug_log("GOAWAY frame with code ", code, " and last_stream_id: ",
+              MAX_STREAM_ID, " will be sent")
+
+    local frame = h2_frame.goaway.new(MAX_STREAM_ID, code, debug_data)
     self:frame_queue(frame)
 end
