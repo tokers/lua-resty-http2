@@ -299,14 +299,18 @@ function _M:rst(code)
         return
     end
 
+    local session = self.session
+
     local frame = h2_frame.rst.new(code, self.sid)
 
-    self.session:frame_queue(frame)
+    session:frame_queue(frame)
 
     -- FIXME we change the stream state just when the frame was queued,
     -- maybe it is improper and shoule be postponed
     -- until the frame was reall sent.
     self.state = STATE_CLOSED
+
+    session.closed_streams = session.closed_streams + 1
 end
 
 
@@ -355,6 +359,9 @@ function _M.new(sid, weight, session)
             recv_window = session.preread_size,
             exhausted = false,
         }
+
+        session.total_streams = session.total_streams + 1
+        session.idle_streams = session.idle_streams + 1
 
         stream_map[sid] = stream
 

@@ -212,6 +212,11 @@ function rst.unpack(rf, src, stream)
 
     rf.error_code = unpack_u32(byte(src, 1, 4))
 
+    stream.state = h2_stream.STATE_CLOSED
+
+    local session = stream.session
+    session.closed_streams = session.closed_streams + 1
+
     return true
 end
 
@@ -560,7 +565,9 @@ function headers.unpack(hf, src, stream)
             stream.state = h2_stream.STATE_HALF_CLOSED_REMOTE
         elseif state == h2_stream.STATE_IDLE then
             stream.state = h2_stream.STATE_OPEN
+            session.idle_streams = session.idle_streams - 1
         else
+            session.closed_streams = session.closed_streams + 1
             stream.state = h2_stream.STATE_CLOSED
         end
     end
@@ -725,7 +732,9 @@ function data.unpack(df, src, stream)
 
     local hd = df.header
     local flag_padded = hd.FLAG_PADDED
+    local flag_end_stream = hd.FLAG_END_STREAM
     local length = hd.length
+    local session = stream.session
 
     if flag_padded then
         if length == 0 then
@@ -746,13 +755,15 @@ function data.unpack(df, src, stream)
         df.payload = src
     end
 
-    if state == h2_stream.STATE_OPEN then
-        stream.state = h2_stream.STATE_HALF_CLOSED_REMOTE
-    else
-        stream.state = h2_stream.STATE_CLOSED
+    if flag_end_stream then
+        if state == h2_stream.STATE_OPEN then
+            stream.state = h2_stream.STATE_HALF_CLOSED_REMOTE
+        else
+            session.closed_streams = session.closed_streams + 1
+            stream.state = h2_stream.STATE_CLOSED
+        end
     end
 
-    local session = stream.session
     local recv_window = session.recv_window
     if length > recv_window then
         return nil, h2_error.FLOW_CONTROL_ERROR

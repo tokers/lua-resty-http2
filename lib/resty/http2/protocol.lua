@@ -242,10 +242,6 @@ end
 
 
 function _M:want_read()
-    if self.goaway_sent then
-        return false
-    end
-
     local total = self.total_streams
     local closed = self.closed_streams
     local idle = self.idle_streams
