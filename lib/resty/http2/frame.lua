@@ -20,9 +20,10 @@ local unpack_u32 = util.unpack_u32
 local new_buffer = util.new_buffer
 local debug_log = util.debug_log
 
-local WINDOW_UPDATE_PAYLOAD_SIZE = 4
 local MAX_WINDOW = h2_stream.MAX_WINDOW
 local HEADER_SIZE = 9
+local DEFAULT_FRAME_SIZE = 16384
+local MAX_FRAME_SIZE = 16777215
 
 local FLAG_NONE = 0x0
 local FLAG_ACK = 0x1
@@ -41,6 +42,12 @@ local PING_FRAME = 0x6
 local GOAWAY_FRAME = 0x7
 local WINDOW_UPDATE_FRAME = 0x8
 local CONTINUATION_FRAME = 0x9
+
+local SETTINGS_ENABLE_PUSH = 0x2
+local SETTINGS_MAX_CONCURRENT_STREAMS = 0x3
+local SETTINGS_INITIAL_WINDOW_SIZE = 0x4
+local SETTINGS_MAX_FRAME_SIZE = 0x5
+
 
 local _M = {
     _VERSION = "0.1",
@@ -228,7 +235,31 @@ function settings.pack(sf, dst)
 end
 
 
-function settings.unpack(sf, src, count)
+function settings.unpack(sf, src, stream)
+    local ack = sf.header.flag_ack
+    local payload_length = sf.header.length
+
+    if ack and payload_length > 0 then
+        debug_log("server sent SETTINGS frame with ACK flag ",
+                  "and non-empty payloads")
+        return nil, h2_error.FRAME_SIZE_ERROR
+    end
+
+    local sid = sf.header.sid
+    if sid ~= 0x0 then
+        debug_log("server sent SETTINGS frame with incorrect ",
+                   "stream identifier: ", sid)
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    if payload_length % 6 ~= 0 then
+        debug_log("server sent SETTINGS frame with incorrect payload length: ",
+                   payload_length)
+        return nil, h2_error.FRAME_SIZE_ERROR
+    end
+
+    local session = stream.session
+    local count = payload_length / 6
     sf.item = new_tab(count, 0)
     local offset = 0
 
@@ -239,7 +270,43 @@ function settings.unpack(sf, src, count)
         sf.item[i] = { id = id, value = value }
 
         offset = offset + 6
+
+        -- TODO handle SETTINGS_HEADER_TABLE_SIZE
+        -- and SETTINGS_MAX_HEADER_LIST_SIZE
+
+        if id == SETTINGS_INITIAL_WINDOW_SIZE then
+            if value > MAX_WINDOW then
+                debug_log("server sent SETTINGS frame with improper ",
+                          "SETTINGS_INITIAL_WINDOW_SIZE value: ", value)
+                return nil, h2_error.FRAME_SIZE_ERROR
+            end
+
+            session.init_window = value
+
+        elseif id == SETTINGS_MAX_CONCURRENT_STREAMS then
+            session.max_stream = value
+
+        elseif id == SETTINGS_ENABLE_PUSH then
+            -- this setting makes no sense for client side,
+            -- we just check the value
+            if value > 1 then
+                debug_log("server sent SETTINGS frame with improper ",
+                          "SETTINGS_MAX_CONCURRENT_STREAMS value: ", value)
+                return nil, h2_error.PROTOCOL_ERROR
+            end
+
+        elseif id == SETTINGS_MAX_FRAME_SIZE then
+            if value > MAX_FRAME_SIZE or value < DEFAULT_FRAME_SIZE then
+                debug_log("server sent SETTINGS frame with improper ",
+                          "SETTINGS_MAX_FRAME_SIZE value: ", value)
+                return nil, h2_error.PROTOCOL_ERROR
+            end
+
+            session.max_frame_size = value
+        end
     end
+
+    return true
 end
 
 
@@ -315,8 +382,7 @@ end
 
 
 function window_update.new(sid, window)
-    local hd = header.new(WINDOW_UPDATE_PAYLOAD_SIZE, WINDOW_UPDATE_FRAME,
-                          FLAG_NONE, sid)
+    local hd = header.new(4, WINDOW_UPDATE_FRAME, FLAG_NONE, sid)
     return {
         header = hd,
         window_size_increment = window,
@@ -726,7 +792,6 @@ _M.FLAG_END_HEADERS = FLAG_END_HEADERS
 _M.FLAG_PADDED = FLAG_PADDED
 _M.FLAG_PRIORITY = FLAG_PRIORITY
 
-_M.MAX_WINDOW = MAX_WINDOW
 _M.HEADER_SIZE = HEADER_SIZE
 
 _M.DATA_FRAME = DATA_FRAME
@@ -739,7 +804,10 @@ _M.PING_FRAME = PING_FRAME
 _M.GOAWAY_FRAME = GOAWAY_FRAME
 _M.WINDOW_UPDATE_FRAME = WINDOW_UPDATE_FRAME
 _M.CONTINUATION_FRAME = CONTINUATION_FRAME
-_M.MAX_FREAME_ID = 0x9
+
+_M.MAX_FRAME_SIZE = MAX_FRAME_SIZE
+_M.DEFAULT_FRAME_SIZE = DEFAULT_FRAME_SIZE
+_M.MAX_FRAME_ID = 0x9
 
 _M.pack = {
     [DATA_FRAME] = data.pack,
@@ -752,7 +820,6 @@ _M.pack = {
     [WINDOW_UPDATE_FRAME] = window_update.pack,
     [CONTINUATION_FRAME] = continuation.pack,
 }
-
 
 _M.unpack = {
     [DATA_FRAME] = data.unpack,

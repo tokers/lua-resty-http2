@@ -49,6 +49,7 @@ function _M.session(recv, send, ctx)
         init_window = DEFAULT_WINDOW_SIZE,
         preread_size = DEFAULT_WINDOW_SIZE,
         max_stream = DEFAULT_MAX_STREAMS,
+        max_frame_size = h2_frame.MAX_FRAME_SIZE,
 
         recv = recv, -- handler for reading data
         send = send, -- handler for writing data
