@@ -330,7 +330,21 @@ function ping.pack(pf, dst)
 end
 
 
-function ping.unpack(pf, src)
+function ping.unpack(pf, src, stream)
+    local sid = stream.sid
+    if sid ~= 0x0 then
+        debug_log("server sent PING frame with ",
+                  "incorrect stream identifier: 0x0")
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local payload_length = pf.header.length
+    if payload_length ~= 8 then
+        debug_log("server sent PING frame with incorrect payload length: ",
+                  payload_length)
+        return nil ,h2_error.FRAME_SIZE_ERROR
+    end
+
     pf.opaque_data_hi = unpack_u32(byte(src, 1, 4))
     pf.opaque_data_lo = unpack_u32(byte(src, 5, 8))
 end
@@ -848,6 +862,7 @@ _M.unpack = {
     [GOAWAY_FRAME] = goaway.unpack,
     [WINDOW_UPDATE_FRAME] = window_update.unpack,
     [CONTINUATION_FRAME] = continuation.pack,
+    [PUSH_PROMISE_FRAME] = push_promise.unpack,
 }
 
 _M.sizeof = {
@@ -860,6 +875,7 @@ _M.sizeof = {
     [GOAWAY_FRAME] = 5,
     [WINDOW_UPDATE_FRAME] = 3,
     [CONTINUATION_FRAME] = 3,
+    [PUSH_PROMISE_FRAME] = 1,
 }
 
 
