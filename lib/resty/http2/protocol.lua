@@ -18,6 +18,7 @@ local MAX_STREAM_ID = 0x7fffffff
 local DEFAULT_WINDOW_SIZE = 65535
 local DEFAULT_MAX_STREAMS = 128
 local DEFAULT_MAX_FRAME_SIZE = h2_frame.MAX_FRAME_SIZE
+local HTTP2_PREFACE = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
 local send_buffer
 local send_buffer_size = 0
@@ -36,59 +37,9 @@ local function handle_error(self, stream, error_code)
 end
 
 
--- create a new http2 session
-function _M.session(recv, send, ctx)
-    if not recv then
-        return nil, "empty read handler"
-    end
-
-    if not send then
-        return nil, "empty write handler"
-    end
-
-    local session = {
-        send_window = DEFAULT_WINDOW_SIZE,
-        recv_window = DEFAULT_WINDOW_SIZE,
-        init_window = DEFAULT_WINDOW_SIZE,
-        preread_size = DEFAULT_WINDOW_SIZE,
-        max_stream = DEFAULT_MAX_STREAMS,
-        max_frame_size = DEFAULT_MAX_FRAME_SIZE,
-
-        recv = recv, -- handler for reading data
-        send = send, -- handler for writing data
-        ctx = ctx,
-
-        last_stream_id = 0x0,
-        next_stream_id = 0x3, -- 0x1 is used for the HTTP/1.1 upgrade
-
-        stream_map = new_tab(4, 0),
-        total_streams = 0,
-        idle_streams = 0,
-        closed_streams = 0,
-        processing = 0,
-
-        goaway_sent = false,
-        goaway_received = false,
-        incomplete_headers = false,
-
-        current_sid = nil,
-
-        output_queue = nil,
-        output_queue_size = 0,
-        last_frame = nil, -- last frame in the output queue
-
-        root = nil,
-    }
-
-    session.root = h2_stream.new_root(session)
-
-    return setmetatable(session, mt)
-end
-
-
 -- send the default settings and advertise the window size
 -- for the whole connection
-function _M:init(preread_size, max_concurrent_stream)
+local function init(self, preread_size, max_concurrent_stream)
     preread_size = preread_size or self.preread_size
     max_concurrent_stream = max_concurrent_stream or DEFAULT_MAX_STREAMS
 
@@ -119,6 +70,68 @@ function _M:init(preread_size, max_concurrent_stream)
     self:frame_queue(wf)
 
     return self:flush_queue()
+end
+
+
+-- create a new http2 session
+function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
+    if not recv then
+        return nil, "empty read handler"
+    end
+
+    if not send then
+        return nil, "empty write handler"
+    end
+
+    local _, err = send(ctx, HTTP2_PREFACE)
+    if err then
+        return nil, err
+    end
+
+    local session = {
+        send_window = DEFAULT_WINDOW_SIZE,
+        recv_window = DEFAULT_WINDOW_SIZE,
+        init_window = DEFAULT_WINDOW_SIZE,
+        preread_size = DEFAULT_WINDOW_SIZE,
+        max_stream = DEFAULT_MAX_STREAMS,
+        max_frame_size = DEFAULT_MAX_FRAME_SIZE,
+
+        recv = recv, -- handler for reading data
+        send = send, -- handler for writing data
+        ctx = ctx,
+
+        last_stream_id = 0x0,
+        next_stream_id = 0x3, -- 0x1 is used for the HTTP/1.1 upgrade
+
+        stream_map = new_tab(4, 0),
+        total_streams = 0,
+        idle_streams = 0,
+        closed_streams = 0,
+
+        goaway_sent = false,
+        goaway_received = false,
+        incomplete_headers = false,
+        settings_ack = false,
+
+        current_sid = nil,
+
+        output_queue = nil,
+        output_queue_size = 0,
+        last_frame = nil, -- last frame in the output queue
+
+        root = nil,
+    }
+
+    session.root = h2_stream.new_root(session)
+
+    local ok
+    ok, err = init(session, preread_size, max_concurrent_stream)
+    if not ok then
+        debug("failed to send SETTINGS frame: ", err)
+        return nil, err
+    end
+
+    return setmetatable(session, mt)
 end
 
 
@@ -198,6 +211,10 @@ end
 function _M:submit_request(headers, no_body, priority, pad)
     if #headers == 0 then
         return nil, "empty headers"
+    end
+
+    if not self.settings_ack then
+        return nil, "haven't received SETTINGS frame ack yet"
     end
 
     local sid = self.next_stream_id
