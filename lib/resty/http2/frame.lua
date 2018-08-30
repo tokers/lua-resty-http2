@@ -64,6 +64,8 @@ local headers = {} -- headers frame
 local continuation = {} -- continuation frame
 local rst_stream = {} -- rst_stream frame
 local data = {} -- data frame
+local push_promise = {} -- push_promise frame
+
 
 function header.new(length, typ, flags, id)
     local flag_ack = band(flags, FLAG_ACK) ~= 0
@@ -773,6 +775,15 @@ function data.new(payload, pad, last, sid)
 end
 
 
+-- XXX just prohibits the PUSH_PROMISE frame,
+-- maybe it will be supported in the future
+function push_promise.unpack()
+    debug_log("server sent PUSH_PROMISE frame with ",
+              "ignoring SETTINGS_ENABLE_PUSH setting")
+    return h2_error.PROTOCOL_ERROR
+end
+
+
 _M.header = header
 _M.priority = priority
 _M.rst = rst
@@ -784,6 +795,7 @@ _M.headers = headers
 _M.continuation = continuation
 _M.rst_stream = rst_stream
 _M.data = data
+_M.push_promise = push_promise
 
 _M.FLAG_NONE = FLAG_NONE
 _M.FLAG_ACK = FLAG_ACK
@@ -808,6 +820,11 @@ _M.CONTINUATION_FRAME = CONTINUATION_FRAME
 _M.MAX_FRAME_SIZE = MAX_FRAME_SIZE
 _M.DEFAULT_FRAME_SIZE = DEFAULT_FRAME_SIZE
 _M.MAX_FRAME_ID = 0x9
+
+_M.SETTINGS_ENABLE_PUSH = SETTINGS_ENABLE_PUSH
+_M.SETTINGS_MAX_CONCURRENT_STREAMS = SETTINGS_MAX_CONCURRENT_STREAMS
+_M.SETTINGS_INITIAL_WINDOW_SIZE = SETTINGS_INITIAL_WINDOW_SIZE
+_M.SETTINGS_MAX_FRAME_SIZE = SETTINGS_MAX_FRAME_SIZE
 
 _M.pack = {
     [DATA_FRAME] = data.pack,

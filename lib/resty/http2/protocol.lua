@@ -8,13 +8,14 @@ local h2_error = require "resty.http2.error"
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
 
-local MAX_STREAMS_SETTING = 0x3
-local INIT_WINDOW_SIZE_SETTING = 0x4
-local MAX_FRAME_SIZE_SETTING = 0x5
+local MAX_STREAMS_SETTING = h2_frame.SETTINGS_MAX_CONCURRENT_STREAMS
+local INIT_WINDOW_SIZE_SETTING = h2_frame.SETTINGS_INITIAL_WINDOW_SIZE
+local MAX_FRAME_SIZE_SETTING = h2_frame.SETTINGS_MAX_FRAME_SIZE
+local ENABLE_PUSH_SETTING = h2_frame.SETTING_ENABLE_PUSH
 local MAX_STREAM_ID = 0x7fffffff
 local DEFAULT_WINDOW_SIZE = 65535
 local DEFAULT_MAX_STREAMS = 128
-local DEFAULT_MAX_FRAME_SIZE = 0xffffff
+local DEFAULT_MAX_FRAME_SIZE = h2_frame.MAX_FRAME_SIZE
 
 local send_buffer
 local send_buffer_size = 0
@@ -49,7 +50,7 @@ function _M.session(recv, send, ctx)
         init_window = DEFAULT_WINDOW_SIZE,
         preread_size = DEFAULT_WINDOW_SIZE,
         max_stream = DEFAULT_MAX_STREAMS,
-        max_frame_size = h2_frame.MAX_FRAME_SIZE,
+        max_frame_size = DEFAULT_MAX_FRAME_SIZE,
 
         recv = recv, -- handler for reading data
         send = send, -- handler for writing data
@@ -57,7 +58,6 @@ function _M.session(recv, send, ctx)
 
         last_stream_id = 0x0,
         next_stream_id = 0x3, -- 0x1 is used for the HTTP/1.1 upgrade
-        enable_push = false,
 
         stream_map = new_tab(4, 0),
         total_streams = 0,
@@ -94,6 +94,7 @@ function _M:init(preread_size, max_concurrent_stream)
         { id = MAX_STREAMS_SETTING, value = max_concurrent_stream },
         { id = INIT_WINDOW_SIZE_SETTING, value = preread_size },
         { id = MAX_FRAME_SIZE_SETTING, value = DEFAULT_MAX_FRAME_SIZE },
+        { id = ENABLE_PUSH_SETTING, value = 0 },
     }
 
     local sf, err = h2_frame.settings.new(0x0, h2_frame.FLAG_NONE, payload)
