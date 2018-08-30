@@ -282,12 +282,26 @@ function _M:submit_data(data, pad, last)
         return nil, "stream send window exhausted"
     end
 
-    local frame, err = h2_frame.data.new(data, pad, last, self.sid)
-    if not frame then
-        return nil, err
+    local frame = h2_frame.data.new(data, pad, last, self.sid)
+
+    local length = frame.header.length
+
+    local self_send_window = self.send_window
+    local session_send_window = self.session.send_window
+
+    if length > self_send_window then
+        return nil, "stream send window is not enough"
     end
 
+    if length > session_send_window then
+        return nil, "connection send window is not enough"
+    end
+
+    self.session.send_window = session_send_window - length
+    self.send_window = self_send_window - length
+
     self.session:frame_queue(frame)
+
     return true
 end
 

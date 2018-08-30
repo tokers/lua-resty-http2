@@ -176,34 +176,9 @@ function _M:flush_queue()
         clear_tab(send_buffer)
     end
 
-    local data_frame = h2_frame.DATA_FRAME
-
     while frame do
-        local header = frame.header
-        local frame_type = header.type
-        if frame_type == data_frame then
-            local stream = self.stream_map[header.sid]
-            if not stream then
-                goto continue
-            end
-
-            -- stranded DATA frames will be sent after the window is update
-            if stream.exhausted then
-                goto continue
-            end
-
-            local frame_size = header.length + h2_frame.HEADER_SIZE
-            local window = stream.send_window - frame_size
-            stream.send_window = window
-            if window <= 0 then
-                stream.exhausted = true
-            end
-        end
-
+        local frame_type = frame.header.type
         h2_frame.pack[frame_type](frame, send_buffer)
-        size = size - 1
-
-        ::continue::
         frame = frame.next
     end
 
