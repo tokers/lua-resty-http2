@@ -333,8 +333,8 @@ end
 function ping.unpack(pf, src, stream)
     local sid = stream.sid
     if sid ~= 0x0 then
-        debug_log("server sent PING frame with ",
-                  "incorrect stream identifier: 0x0")
+        debug_log("server sent PING frame with incorrect stream identifier: ",
+                  sid)
         return nil, h2_error.PROTOCOL_ERROR
     end
 
@@ -361,14 +361,38 @@ function goaway.pack(gf, dst)
 end
 
 
-function goaway.unpack(gf, src)
+function goaway.unpack(gf, src, stream)
     local payload_length = gf.header.length
-    gf.last_stream_id = unpack_u32(byte(src, 1, 4))
-    gf.error_code = unpack_u32(byte(src, 5, 8))
+    if payload_length < 4 then
+        debug_log("server sent GOAWAY frame with incorrect payload length: ",
+                  payload_length)
+        return nil, h2_error.FRAME_SIZE_ERROR
+    end
+
+    local sid = stream.sid
+    if sid ~= 0x0 then
+        debug_log("server sent GOAWAY frame with incorrect stream identifier: ",
+                  sid)
+        return nil, h2_error.PROTOCOL_ERROR
+    end
+
+    local session = stream.session
+    local last_stream_id = unpack_u32(byte(src, 1, 4))
+    local error_code = unpack_u32(byte(src, 5, 8))
+
+    session.goaway_received = true
+    session.last_stream_id = last_stream_id
+    gf.last_stream_id = last_stream_id
+    gf.error_code = error_code
+
+    debug_log("server sent GOAWAY frame with last stream id: ", last_stream_id,
+              ", error_code: ", error_code)
 
     if payload_length > 8 then
         gf.debug_data = sub(src, 9, payload_length - 8)
     end
+
+    return true
 end
 
 
