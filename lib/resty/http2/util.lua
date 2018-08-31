@@ -84,6 +84,11 @@ function _M.is_tab(tab)
 end
 
 
+function _M.is_func(func)
+    return type(func) == "function"
+end
+
+
 -- TODO recycle the buffer struct if necessary
 function _M.new_buffer(data, pos, last)
     return {
