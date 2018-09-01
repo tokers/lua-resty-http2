@@ -190,7 +190,7 @@ function _M:submit_headers(headers, end_stream, priority, pad)
        and state ~= STATE_RESERVED_LOCAL
        and state ~= STATE_HALF_CLOSED_REMOTE
     then
-        return nil, h2_error.INVALID_STREAM_STATE
+        return nil, "invalid stream state"
     end
 
     local sid = self.sid

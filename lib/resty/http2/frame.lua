@@ -235,9 +235,11 @@ end
 function settings.pack(sf, dst)
     header.pack(sf.header, dst)
 
-    for i = 1, #sf.item do
-        pack_u16(sf.item[i].id, dst)
-        pack_u32(sf.item[i].value, dst)
+    if sf.item then
+        for i = 1, #sf.item do
+            pack_u16(sf.item[i].id, dst)
+            pack_u32(sf.item[i].value, dst)
+        end
     end
 end
 
@@ -323,8 +325,8 @@ function settings.unpack(sf, src, stream)
 end
 
 
-function settings.new(sid, flags, payload)
-    local hd = header.new(6 * #payload, SETTINGS_FRAME, flags, sid)
+function settings.new(flags, payload)
+    local hd = header.new(6 * #payload, SETTINGS_FRAME, flags, 0)
 
     return {
         header = hd,

@@ -360,4 +360,6 @@ function _M:close(code, debug_data)
 
     local frame = h2_frame.goaway.new(MAX_STREAM_ID, code, debug_data)
     self:frame_queue(frame)
+
+    self.goaway_sent = true
 end
