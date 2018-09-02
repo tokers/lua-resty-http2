@@ -3,7 +3,7 @@
 local bit = require "bit"
 local util = require "resty.http2.util"
 local h2_stream = require "resty.http2.stream"
-local h2_error = require "resty.http2.h2_error"
+local h2_error = require "resty.http2.error"
 
 local bor = bit.bor
 local band = bit.band
@@ -235,10 +235,11 @@ end
 function settings.pack(sf, dst)
     header.pack(sf.header, dst)
 
-    if sf.item then
-        for i = 1, #sf.item do
-            pack_u16(sf.item[i].id, dst)
-            pack_u32(sf.item[i].value, dst)
+    local item = sf.item
+    if item then
+        for i = 1, #item do
+            pack_u16(item[i].id, dst)
+            pack_u32(item[i].value, dst)
         end
     end
 end

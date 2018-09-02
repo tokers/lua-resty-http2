@@ -13,7 +13,7 @@ local debug_log = util.debug_log
 local MAX_STREAMS_SETTING = h2_frame.SETTINGS_MAX_CONCURRENT_STREAMS
 local INIT_WINDOW_SIZE_SETTING = h2_frame.SETTINGS_INITIAL_WINDOW_SIZE
 local MAX_FRAME_SIZE_SETTING = h2_frame.SETTINGS_MAX_FRAME_SIZE
-local ENABLE_PUSH_SETTING = h2_frame.SETTING_ENABLE_PUSH
+local ENABLE_PUSH_SETTING = h2_frame.SETTINGS_ENABLE_PUSH
 local MAX_STREAM_ID = 0x7fffffff
 local DEFAULT_WINDOW_SIZE = 65535
 local DEFAULT_MAX_STREAMS = 128
@@ -50,13 +50,13 @@ local function init(self, preread_size, max_concurrent_stream)
         { id = ENABLE_PUSH_SETTING, value = 0 },
     }
 
-    local sf, err = h2_frame.settings.new(0x0, h2_frame.FLAG_NONE, payload)
+    local sf, err = h2_frame.settings.new(h2_frame.FLAG_NONE, payload)
 
     if not sf then
         return nil, err
     end
 
-    local incr = h2_frame.MAX_WINDOW - DEFAULT_WINDOW_SIZE
+    local incr = h2_stream.MAX_WINDOW - DEFAULT_WINDOW_SIZE
 
     local wf
     wf, err = h2_frame.window_update.new(0x0, incr)
@@ -122,6 +122,8 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
         root = nil,
     }
 
+    session = setmetatable(session, mt)
+
     session.root = h2_stream.new_root(session)
 
     local ok
@@ -131,7 +133,7 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
         return nil, err
     end
 
-    return setmetatable(session, mt)
+    return session
 end
 
 
@@ -363,3 +365,6 @@ function _M:close(code, debug_data)
 
     self.goaway_sent = true
 end
+
+
+return _M
