@@ -2,8 +2,8 @@
 
 local util = require "resty.http2.util"
 local hpack = require "resty.http2.hpack"
-local h2_frame = require "resty.http2.frame"
 local h2_error = require "resty.http2.error"
+local h2_frame
 
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
@@ -215,8 +215,10 @@ function _M:submit_headers(headers, end_stream, priority, pad)
         clear_tab(buffer)
     end
 
-    for name, value in pairs(headers) do
-        name = lower(name)
+    for i = 1, #headers do
+        local name = lower(headers[i].name)
+        local value = headers[i].value
+
         if IS_CONNECTION_SPEC_HEADERS[name] then
             goto continue
         end
@@ -399,6 +401,12 @@ end
 
 
 function _M.new_root(session)
+    -- XXX this is a work around way to solve
+    -- the mutal requision of frame.lua nad stream.lua,
+    if not h2_frame then
+        h2_frame = require "resty.http2.frame"
+    end
+
     local root = {
         sid = 0x0,
         rank = 0,
@@ -423,5 +431,6 @@ _M.STATE_RESERVED_LOCAL = STATE_RESERVED_LOCAL
 _M.STATE_RESERVED_REMOTE = STATE_RESERVED_REMOTE
 
 _M.MAX_WINDOW = MAX_WINDOW
+
 
 return _M

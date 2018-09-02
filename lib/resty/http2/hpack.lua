@@ -619,7 +619,7 @@ end
 
 _M.MAX_TABLE_SIZE = MAX_TABLE_SIZE
 
-_M.COMMON_REQUESTS_HEADER_INDEX = {
+_M.COMMON_REQUEST_HEADERS_INDEX = {
     [":authority"]          = 1,
     ["accept-charset"]      = 15,
     ["accept-language"]     = 17,

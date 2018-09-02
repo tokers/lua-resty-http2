@@ -215,10 +215,6 @@ function _M:submit_request(headers, no_body, priority, pad)
         return nil, "empty headers"
     end
 
-    if not self.settings_ack then
-        return nil, "haven't received SETTINGS frame ack yet"
-    end
-
     local sid = self.next_stream_id
     if sid > MAX_STREAM_ID then
         return nil, "stream id overflow"
@@ -313,7 +309,7 @@ function _M:recv_frame()
                 return nil, err
             end
 
-            local sid = hd.sid
+            local sid = hd.id
             local stream = self.stream_map[sid]
             if sid > 0x0 and not stream then
                 -- idle stream

@@ -366,8 +366,8 @@ end
 
 function goaway.pack(gf, dst)
     header.pack(gf.header, dst)
-    pack_u32(gf.last_stream_id)
-    pack_u32(gf.error_code)
+    pack_u32(gf.last_stream_id, dst)
+    pack_u32(gf.error_code, dst)
 
     if gf.debug_data then
         dst[#dst + 1] = gf.debug_data
@@ -504,7 +504,7 @@ end
 
 
 function headers.pack(hf, dst)
-    header.pack(hf, dst)
+    header.pack(hf.header, dst)
 
     local flag_padded = hf.header.flag_padded
     local flag_priority = hf.header.flag_priority
@@ -691,9 +691,9 @@ function headers.new(frags, pri, pad, end_stream, sid)
 
     return {
         header = hd,
-        depend = pri.sid,
-        weight = pri.weight,
-        excl = pri.excl,
+        depend = pri and pri.sid,
+        weight = pri and pri.weight,
+        excl = pri and pri.excl,
         block_frags = frags,
         pad = pad,
         next = nil,
