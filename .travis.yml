@@ -2,25 +2,24 @@ language: perl
 perl:
     - 5.10
 cache:
-    - apt
-    - ccache
+    - apt: true
+    - ccache: true
+    - 
 services:
     - redis-server
 env:
-    - V_OPENRESTY=1.13.6.1
-    - V_LUAROCKS=3.0.1
+    global:
+        - V_OPENRESTY=1.13.6.1
+        - V_LUAROCKS=3.0.1
+        - DOWNLOAD_CACHE=$HOME/download_cache
+        - INSTALL_CACHE=$HOME/install_cache
 install:
     - cpanm -v --notest Test::Nginx
 before_script:
     - sudo apt-get update -q
     - sudo apt-get install libreadline-dev libncurses5-dev libpcre3-dev libssl-dev -y
     - sudo apt-get install make build-essential lua5.1 -y
-    - wget http://luarocks.github.io/luarocks/releases/luarocks-$V_LUAROCKS.tar.gz
-    - tar xzf luarocks-$V_LUAROCKS.tar.gz
-    - cd luarocks-$V_LUAROCKS && ./configure && make && sudo make sintall && cd ..
+    - source .ci/servtup.sh
     - sudo luarocks install luacheck
-    - wget https://openresty.org/download/openresty-$V_OPENRESTY.tar.gz
-    - tar xzf openresty-$V_OPENRESTY.tar.gz
-    - cd openresty-$V_OPENRESTY && ./configure --with-http_v2_module && make && sudo make install && cd ..
 script:
     - make test
