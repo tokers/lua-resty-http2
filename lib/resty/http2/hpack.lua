@@ -549,6 +549,10 @@ function _M:decode(dst)
             end
 
             dst[header_name] = header_value
+
+            if index_type == HPACK_INCR_INDEXING then
+                self:insert_entry(header_name, header_value)
+            end
         end
     end
 
