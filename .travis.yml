@@ -19,7 +19,7 @@ before_script:
     - sudo apt-get update -q
     - sudo apt-get install libreadline-dev libncurses5-dev libpcre3-dev libssl-dev -y
     - sudo apt-get install make build-essential lua5.1 -y
-    - source .ci/servtup.sh
+    - source .ci/setup.sh
     - sudo luarocks install luacheck
 script:
     - make test
