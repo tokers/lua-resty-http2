@@ -161,8 +161,8 @@ function priority.unpack(pf, src, stream)
     local weight = b5
 
     if depend == sid then
-        debug_log("server sent PRIORITY frame with incorrect dependent stream: ",
-                  depend)
+        debug_log("server sent PRIORITY frame with incorrect ",
+                  "dependent stream: ", depend)
         return nil, h2_error.PROTOCOL_ERROR
     end
 
