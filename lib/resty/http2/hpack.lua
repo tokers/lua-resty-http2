@@ -518,7 +518,6 @@ function _M:decode(dst)
                 return nil, h2_error.COMPRESSION_ERROR
             end
 
-            ngx.log(ngx.ERR, "get header ", entry.name, ": ", entry.value)
             dst[entry.name] = entry.value
 
         elseif size_update then

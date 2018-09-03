@@ -27,11 +27,12 @@ end
 
 local prepare_request = function()
     local headers = {
-        [":authority"] = "tokers.com",
-        [":method"] = "GET",
-        [":path"] = "/index.html",
-        ["accept-encoding"] = "gzip",
-        ["user-agent"] = "example/client",
+        { name = ":authority", value = "tokers.com" },
+        { name = ":method", value = "GET" },
+        { name = ":path", value = "/index.html" },
+        { name = ":scheme", value = "http" },
+        { name = "accept-encoding", value = "gzip" },
+        { name = "user-agent", value = "example/client" },
     }
 
     return headers
@@ -42,11 +43,15 @@ local on_headers_reach = function(ctx, headers)
     for k, v in pairs(headers) do
         print(k, ": ", v)
     end
+
+    return true
 end
 
 local on_data_reach = function(ctx, data)
     print("received DATA frame:")
     print(data)
+
+    return true
 end
 
 local opts = {
@@ -66,4 +71,11 @@ if not client then
     exit(1)
 end
 
-ngx.sleep(5)
+local ok, err = client:process()
+if not ok then
+    print("client:process() failed: ", err)
+    exit(1)
+end
+
+
+sock:close()
