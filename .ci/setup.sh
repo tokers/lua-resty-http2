@@ -48,3 +48,6 @@ if [ ! "$(ls -A $LUAROCKS_INSTALL_DIR)" ]; then
     popd
 fi
 
+export PATH=$PATH:$OPENRESTY_INSTALL/nginx/sbin:$OPENRESTY_INSTALL/bin:$LUAROCKS_INSTALL/bin
+
+eval `luarocks path`
