@@ -14,7 +14,6 @@ local char = string.char
 local sub = string.sub
 local byte = string.byte
 local concat = table.concat
-local floor = math.floor
 local setmetatable = setmetatable
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab

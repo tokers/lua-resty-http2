@@ -94,7 +94,7 @@ local function handle_frame(self, session)
         if typ == h2_frame.RST_STREAM_FRAME then
             return nil, "stream reset"
         else
-            if error_code == h2_error.NO_ERROR then
+            if frame.error_code == h2_error.NO_ERROR then
                 return true
             end
 

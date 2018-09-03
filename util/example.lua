@@ -38,20 +38,28 @@ local prepare_request = function()
     return headers
 end
 
+local body_length
+
 local on_headers_reach = function(ctx, headers)
     print("received HEADERS frame:")
     for k, v in pairs(headers) do
         print(k, ": ", v)
     end
 
-    return true
+    local length = headers["content-length"]
+
+    body_length = tonumber(length)
+
+    return not body_length or body_length == 0
 end
 
 local on_data_reach = function(ctx, data)
     print("received DATA frame:")
     print(data)
 
-    return true
+    body_length = body_length - #data
+
+    return body_length == 0
 end
 
 local opts = {

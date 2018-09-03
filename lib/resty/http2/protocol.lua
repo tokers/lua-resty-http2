@@ -65,7 +65,7 @@ local function init(self, preread_size, max_concurrent_stream)
         return nil, err
     end
 
-    self.recv_window = h2_frame.MAX_WINDOW
+    self.recv_window = h2_stream.MAX_WINDOW
 
     self:frame_queue(sf)
     self:frame_queue(wf)
@@ -216,7 +216,7 @@ end
 
 
 -- submit a request
-function _M:submit_request(headers, no_body, priority, pad)
+function _M:submit_request(headers, priority, pad)
     if #headers == 0 then
         return nil, "empty headers"
     end
