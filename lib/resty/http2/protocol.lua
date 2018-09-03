@@ -4,6 +4,7 @@ local util = require "resty.http2.util"
 local h2_frame = require "resty.http2.frame"
 local h2_stream = require "resty.http2.stream"
 local h2_error = require "resty.http2.error"
+local h2_hpack = require "resty.http2.hpack"
 
 local pairs = pairs
 local new_tab = util.new_tab
@@ -103,7 +104,7 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
         last_stream_id = 0x0,
         next_stream_id = 0x3, -- 0x1 is used for the HTTP/1.1 upgrade
 
-        stream_map = new_tab(4, 0),
+        stream_map = new_tab(4, 1),
         total_streams = 0,
         idle_streams = 0,
         closed_streams = 0,
@@ -120,11 +121,14 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
         last_frame = nil, -- last frame in the output queue
 
         root = nil,
+
+        hpack = h2_hpack.new(),
     }
 
     session = setmetatable(session, mt)
 
     session.root = h2_stream.new_root(session)
+    session.stream_map[0] = session.root
 
     local ok
     ok, err = init(session, preread_size, max_concurrent_stream)
@@ -139,19 +143,21 @@ end
 
 function _M:adjust_window(delta)
     local max_window = h2_stream.MAX_WINDOW
-    for _, stream in pairs(self.stream_map) do
-        local send_window = stream.send_window
-        if delta > 0 and send_window > max_window - delta then
-            stream:rst(h2_error.FLOW_CONTROL_ERROR)
-            return
-        end
+    for sid, stream in pairs(self.stream_map) do
+        if sid ~= 0x0 then
+            local send_window = stream.send_window
+            if delta > 0 and send_window > max_window - delta then
+                stream:rst(h2_error.FLOW_CONTROL_ERROR)
+                return
+            end
 
-        stream.send_window = send_window + delta
-        if stream.send_window > 0 and stream.exhausted then
-            stream.exhausted = false
+            stream.send_window = send_window + delta
+            if stream.send_window > 0 and stream.exhausted then
+                stream.exhausted = false
 
-        elseif stream.send_window < 0 then
-            stream.exhausted = true
+            elseif stream.send_window < 0 then
+                stream.exhausted = true
+            end
         end
     end
 
@@ -238,7 +244,7 @@ function _M:submit_request(headers, no_body, priority, pad)
     end
 
     local ok
-    ok, err = stream:submit_headers(headers, no_body, priority, pad)
+    ok, err = stream:submit_headers(headers, false, priority, pad)
     if not ok then
         return nil, err
     end
@@ -285,30 +291,25 @@ function _M:recv_frame()
     local ctx = self.ctx
     local recv = self.recv
 
-    local bytes, err = recv(ctx, h2_frame.HEADER_SIZE)
-    if err then
-        return nil, err
-    end
-
     local incomplete_headers = self.incomplete_headers
     local frame
     local ok
 
     while true do
+        local bytes, err = recv(ctx, h2_frame.HEADER_SIZE)
+        if err then
+            return nil, err
+        end
+
         local hd = h2_frame.header.unpack(bytes)
         local typ = hd.type
 
-        bytes, err = recv(ctx, hd.length)
+        bytes, err = recv(ctx, hd.length) -- read the payload
         if err then
             return nil, err
         end
 
         if typ <= h2_frame.MAX_FRAME_ID then
-            bytes, err = recv(ctx, hd.length) -- read the payload
-            if err then
-                return nil, err
-            end
-
             local sid = hd.id
             local stream = self.stream_map[sid]
             if sid > 0x0 and not stream then

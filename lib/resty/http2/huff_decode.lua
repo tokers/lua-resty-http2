@@ -2630,6 +2630,12 @@ function _M:decode(src, dst, last)
 end
 
 
+function _M:reset()
+    self.code = 0x0
+    self.ending = false
+end
+
+
 -- create a huffman decoding state.
 function _M.new_state()
     return setmetatable({ code = 0x0, ending = false }, mt)

@@ -189,7 +189,7 @@ end
 
 
 function rst.unpack(rf, src, stream)
-    local sid = rf.header.sid
+    local sid = rf.header.id
     if sid == 0x0 then
         debug_log("server sent RST_STREAM frame with ",
                   "incorrect stream identifier: 0x0")
@@ -255,7 +255,7 @@ function settings.unpack(sf, src, stream)
         return nil, h2_error.FRAME_SIZE_ERROR
     end
 
-    local sid = sf.header.sid
+    local sid = sf.header.id
     if sid ~= 0x0 then
         debug_log("server sent SETTINGS frame with incorrect ",
                    "stream identifier: ", sid)
@@ -327,7 +327,12 @@ end
 
 
 function settings.new(flags, payload)
-    local hd = header.new(6 * #payload, SETTINGS_FRAME, flags, 0)
+    local length = 0
+    if payload then
+        length = 6 * #payload
+    end
+
+    local hd = header.new(length, SETTINGS_FRAME, flags, 0)
 
     return {
         header = hd,
@@ -541,7 +546,7 @@ function headers.unpack(hf, src, stream)
     local flag_priority = hd.FLAG_PRIORITY
 
     local length = hd.length
-    local offset = 0
+    local offset = 1
     local size = 0
     local depend
     local weight
@@ -551,7 +556,7 @@ function headers.unpack(hf, src, stream)
     local session = stream.session
     local next_stream_id = session.next_stream_id
 
-    if sid % 2 == 1 or sid >= next_stream_id then
+    if sid % 2 == 0 or sid >= next_stream_id then
         debug_log("server sent HEADERS frame with incorrect identifier", sid)
         return nil, h2_error.PROTOCOL_ERROR
     end
@@ -576,7 +581,7 @@ function headers.unpack(hf, src, stream)
         size = size + 5
     end
 
-    if size <= length then
+    if size >= length then
         debug_log("server sent HEADERS frame with incorrect length ", length)
         return nil, h2_error.FRAME_SIZE_ERROR
     end
@@ -591,7 +596,7 @@ function headers.unpack(hf, src, stream)
             return nil, h2_error.FRAME_SIZE_ERROR
         end
 
-        offset = 1
+        offset = 2
         length = length - pad_length
     end
 
@@ -669,7 +674,7 @@ function headers.unpack(hf, src, stream)
 end
 
 
-function headers.new(frags, pri, pad, end_stream, sid)
+function headers.new(frags, pri, pad, end_stream, end_headers, sid)
     local payload_length = #frags
     local flags = FLAG_NONE
 
@@ -679,6 +684,10 @@ function headers.new(frags, pri, pad, end_stream, sid)
 
     if pri then
         flags = bor(flags, FLAG_PRIORITY)
+    end
+
+    if end_headers then
+        flags = bor(flags, FLAG_END_HEADERS)
     end
 
     -- basically we don't use this but still we should respect it

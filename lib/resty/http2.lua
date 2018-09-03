@@ -83,7 +83,7 @@ local function handle_frame(self, session)
     end
 
     local typ = frame.header.type
-    if typ == h2_frame.RST_STREAM_FRAME or h2_frame.GOAWAY_FRAME then
+    if typ == h2_frame.RST_STREAM_FRAME or typ == h2_frame.GOAWAY_FRAME then
         session:close()
 
         local ok, flush_err = session:flush_queue()
@@ -94,14 +94,18 @@ local function handle_frame(self, session)
         if typ == h2_frame.RST_STREAM_FRAME then
             return nil, "stream reset"
         else
+            if error_code == h2_error.NO_ERROR then
+                return true
+            end
+
             return nil, "connection went away"
         end
     end
 
-    if typ == h2_frame.SETTING_FRAME and not frame.header.flag_ack then
+    if typ == h2_frame.SETTINGS_FRAME and not frame.header.flag_ack then
         -- response to the server's SETTINGS frame
         local settings_frame = h2_frame.settings.new(h2_frame.FLAG_ACK, nil)
-        self:frame_queue(settings_frame)
+        session:frame_queue(settings_frame)
         return session:flush_queue()
     end
 

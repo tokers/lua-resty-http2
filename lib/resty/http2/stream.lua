@@ -239,6 +239,7 @@ function _M:submit_headers(headers, end_stream, priority, pad)
             end
         end
 
+        buffer[#buffer + 1] = hpack.incr_indexed(0)
         hpack.encode(name, buffer, true)
         hpack.encode(value, buffer, true)
 
@@ -246,7 +247,7 @@ function _M:submit_headers(headers, end_stream, priority, pad)
     end
 
     local frame, err = h2_frame.headers.new(concat(buffer), priority, pad,
-                                            end_stream, sid)
+                                            end_stream, true, sid)
     if not frame then
         return nil, err
     end

@@ -17,6 +17,7 @@ local concat = table.concat
 local floor = math.floor
 local setmetatable = setmetatable
 local new_tab = util.new_tab
+local clear_tab = util.clear_tab
 local debug_log = util.debug_log
 
 local _M = { _VERSION = "0.1" }
@@ -31,6 +32,9 @@ local HPACK_INDEXED = 0
 local HPACK_INCR_INDEXING = 1
 local HPACK_WITHOUT_INDEXING = 2
 local HPACK_NEVER_INDEXED = 3
+
+local huff_data
+local huff_data_len = 0
 
 local hpack_static_table = {
     { name = ":authority", value = "" },
@@ -217,6 +221,7 @@ local function parse_raw(buffer, length)
         if size >= length then
             data[#data + 1] = sub(buffer.data, pos, pos + length - 1)
             buffer.pos = pos + length
+            length = 0
             break
         end
 
@@ -227,6 +232,7 @@ local function parse_raw(buffer, length)
             data[#data + 1] = sub(buffer.data, pos, last - 1)
         end
 
+        length = length - size
         buffer = buffer.next
     end
 
@@ -240,7 +246,12 @@ end
 
 
 local function parse_huff(hpack, buffer, length)
-    local data = new_tab(floor(length / 8 * 5) + 1, 0)
+    if huff_data_len < length then
+        huff_data = new_tab(length, 0)
+        huff_data_len = length
+    else
+        clear_tab(huff_data)
+    end
 
     while true do
         if not buffer then
@@ -254,13 +265,15 @@ local function parse_huff(hpack, buffer, length)
             local src = sub(buffer.data, pos, pos + length - 1)
             buffer.pos = pos + length
 
-            local ok, err = hpack.decode_state:decode(src, data, true)
+            local ok, err = hpack.decode_state:decode(src, huff_data, true)
             if not ok then
                 debug_log("hpack huffman decoding error: ", err)
                 return
             end
 
-            return concat(data)
+            hpack.decode_state:reset()
+
+            return concat(huff_data)
         end
 
         local src
@@ -272,7 +285,7 @@ local function parse_huff(hpack, buffer, length)
 
         buffer = buffer.next
 
-        local ok, err = hpack.decode_state:decode(src, data, false)
+        local ok, err = hpack.decode_state:decode(src, huff_data, false)
         if not ok then
             debug_log("hpack huffman decoding error: ", err)
             return
@@ -284,7 +297,7 @@ local function parse_huff(hpack, buffer, length)
         return
     end
 
-    return concat(data)
+    return concat(huff_data)
 end
 
 
@@ -465,12 +478,13 @@ function _M:decode(dst)
     local prefix
 
     while true do
-        if buffer.pos == buffer.last then
+        local pos = buffer.pos
+        if pos == buffer.last then
             break
         end
 
-        local ch = band(byte(buffer.data, buffer.pos), 0xff)
-        buffer.pos = buffer.pos + 1
+        local ch = band(byte(buffer.data, pos), 0xff)
+        buffer.pos = pos + 1
 
         if ch >= 128 then -- indexed header field
             prefix = 127
@@ -504,38 +518,40 @@ function _M:decode(dst)
                 return nil, h2_error.COMPRESSION_ERROR
             end
 
+            ngx.log(ngx.ERR, "get header ", entry.name, ": ", entry.value)
             dst[entry.name] = entry.value
 
         elseif size_update then
             if not self:resize(value) then
                 return nil, h2_error.COMPRESSION_ERROR
             end
-        end
-
-        local header_name
-        local header_value
-
-        if value > 0 then
-            local entry = self:get_indexed_header(value)
-            if not entry then
-                return nil, h2_error.COMPRESSION_ERROR
-            end
-
-            header_name = entry.name
 
         else
-            header_name = parse_value(self, buffer)
-            if not header_name then
+            local header_name
+            local header_value
+
+            if value > 0 then
+                local entry = self:get_indexed_header(value)
+                if not entry then
+                    return nil, h2_error.COMPRESSION_ERROR
+                end
+
+                header_name = entry.name
+
+            else
+                header_name = parse_value(self, buffer)
+                if not header_name then
+                    return nil, h2_error.COMPRESSION_ERROR
+                end
+            end
+
+            header_value = parse_value(self, buffer)
+            if not header_value then
                 return nil, h2_error.COMPRESSION_ERROR
             end
-        end
 
-        header_value = parse_value(self, buffer)
-        if not header_value then
-            return nil, h2_error.COMPRESSION_ERROR
+            dst[header_name] = header_value
         end
-
-        dst[header_name] = header_value
     end
 
     return true
