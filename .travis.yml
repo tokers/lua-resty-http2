@@ -22,4 +22,4 @@ before_script:
     - source .ci/setup.sh
     - luarocks install luacheck
 script:
-    - make test
+    - OPENRESTY_INSTALL_DIR=$DOWNLOAD_CACHE/openresty-$V_OPENRESTY make test
