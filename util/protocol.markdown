@@ -24,6 +24,7 @@
   * [Literal Header Field Never Indexed](#literal-header-field-never-indexed)
     * [Indexed Name](#indexed-name)
     * [New Name](#new-name)
+  * [Dynamic Table Size Update](dynamic-table-size-update)
 
 # FRAME
 
@@ -281,4 +282,13 @@
 +---+---------------------------+
 |  Value String (Length octets) |
 +-------------------------------+
+```
+
+## Dynamic Table Size Update
+
+```
+  0   1   2   3   4   5   6   7
++---+---+---+---+---+---+---+---+
+| 0 | 0 | 1 |   Max size (5+)   |
++---+---------------------------+
 ```
