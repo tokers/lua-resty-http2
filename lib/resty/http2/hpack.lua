@@ -520,6 +520,8 @@ function _M:decode(dst)
             dst[entry.name] = entry.value
 
         elseif size_update then
+            size_update = false
+
             if not self:resize(value) then
                 return nil, h2_error.COMPRESSION_ERROR
             end

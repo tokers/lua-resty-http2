@@ -47,7 +47,7 @@ __DATA__
             end
 
             local sock = ngx.socket.tcp()
-            local ok, err = sock:connect("127.0.0.1", 8082)
+            local ok, err = sock:connect("127.0.0.1", 8083)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
