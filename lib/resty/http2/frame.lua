@@ -773,7 +773,7 @@ end
 
 
 function data.pack(df, dst)
-    header.pack(df, dst)
+    header.pack(df.header, dst)
 
     local flag_padded = df.header.FLAG_PADDED
     if flag_padded then
