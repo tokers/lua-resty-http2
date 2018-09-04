@@ -3,6 +3,8 @@ Name
 
 lua-resty-http2 - The HTTP/2 Protocol (Client Side) Implementation for OpenResty. Still Pending.
 
+![Build Status](https://travis-ci.org/tokers/lua-resty-http2.svg?branch=master)
+
 Status
 ======
 
