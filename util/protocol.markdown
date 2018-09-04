@@ -24,7 +24,7 @@
   * [Literal Header Field Never Indexed](#literal-header-field-never-indexed)
     * [Indexed Name](#indexed-name)
     * [New Name](#new-name)
-  * [Dynamic Table Size Update](dynamic-table-size-update)
+  * [Dynamic Table Size Update](#dynamic-table-size-update)
 
 # FRAME
 

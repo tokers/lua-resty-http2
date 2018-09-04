@@ -16,10 +16,15 @@ Author
 
 Alex Zhang (张超) zchao1995@gmail.com, UPYUN Inc.
 
+
+Copyright and License
+=====================
+
+Please see the [LICENSE](LICENSE) file.
+
 See Also
 ========
 
 * upyun-resty: https://github.com/upyun/upyun-resty
 * lua-resty-httpipe: https://github.com/timebug/lua-resty-httpipe
 * lua-resty-requests: https://github.com/tokers/lua-resty-requests
-
