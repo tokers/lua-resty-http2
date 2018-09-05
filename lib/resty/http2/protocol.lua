@@ -34,6 +34,13 @@ local function handle_error(self, stream, error_code)
         self:close(error_code)
     end
 
+    -- we flush the frame queue actively,
+    -- since callers cannot distinguish protocol error and network error
+    local ok, err = self:flush_queue()
+    if not ok then
+        debug_log("failed to flush frame queue: ", err)
+    end
+
     return nil, h2_error.strerror(error_code)
 end
 
@@ -112,7 +119,6 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
         goaway_sent = false,
         goaway_received = false,
         incomplete_headers = false,
-        settings_ack = false,
 
         current_sid = nil,
 
@@ -133,7 +139,7 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
     local ok
     ok, err = init(session, preread_size, max_concurrent_stream)
     if not ok then
-        debug("failed to send SETTINGS frame: ", err)
+        debug_log("failed to send SETTINGS frame: ", err)
         return nil, err
     end
 

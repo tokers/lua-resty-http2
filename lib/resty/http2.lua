@@ -72,13 +72,6 @@ local function handle_frame(self, session)
     local frame, err = session:recv_frame()
     if not frame then
         debug_log("failed to receive a frame: ", err)
-
-        -- flush the frame queue
-        local ok, flush_err = session:flush_queue()
-        if not ok then
-            return nil, flush_err
-        end
-
         return nil, err
     end
 
