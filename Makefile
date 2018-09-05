@@ -19,7 +19,7 @@ test: luareleng luacheck
 	@resty t/unit/test_huffman.lua
 	@echo -n "resty t/unit/test_hufman.lua ...... "
 	@resty t/unit/test_hpack.lua
-	@echo "ok\n"
+	@echo -e "ok\n"
 
 	sudo cp lib/resty/*.lua $(OPENRESTY_INSTALL_DIR)/lualib/resty
 	sudo cp -r lib/resty/http2/ $(OPENRESTY_INSTALL_DIR)/lualib/resty/
