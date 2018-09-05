@@ -8,7 +8,11 @@ our $http_config = << 'EOC';
         http2_body_preread_size 256;
 
         location = /t1 {
-            return 200;
+            lua_need_request_body on;
+            content_by_lua_block {
+                ngx.status = 200
+                return ngx.exit(200)
+            }
         }
 
         location = /t2 {
