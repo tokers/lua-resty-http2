@@ -864,7 +864,7 @@ function data.unpack(df, src, stream)
 
     recv_window = recv_window - length
     if recv_window * 4 < init_window then
-        if not session:submit_window_update(MAX_WINDOW - recv_window) then
+        if not stream:submit_window_update(init_window - recv_window) then
             return nil, h2_error.INTERNAL_ERROR
         end
 
