@@ -256,17 +256,20 @@ function _M:submit_headers(headers, end_stream, priority, pad)
 
     -- FIXME we change the stream state just when the frame was queued,
     -- maybe it is improper and shoule be postponed
-    -- until the frame was reall sent.
-    if end_stream then
-        self.state = STATE_CLOSED
+    -- until the frame was really sent.
+    if state == STATE_IDLE then
+        self.state = end_stream and STATE_HALF_CLOSED_LOCAL or STATE_OPEN
 
-    else
-        if state == STATE_IDLE then
-            self.state = STATE_OPEN
+    elseif state == STATE_RESERVED_LOCAL then
+        self.state = end_stream and STATE_CLOSED or STATE_HALF_CLOSED_REMOTE
+    end
 
-        elseif state == STATE_RESERVED_LOCAL then
-            self.state = STATE_HALF_CLOSED_REMOTE
-        end
+    local peer_state = self.peer_state
+    if peer_state == STATE_IDLE then
+        self.peer_state = end_stream and STATE_HALF_CLOSED_REMOTE or STATE_OPEN
+
+    elseif peer_state == STATE_RESERVED_REMOTE then
+        self.peer_state = end_stream and STATE_CLOSED or STATE_HALF_CLOSED_LOCAL
     end
 
     self.end_headers = true
@@ -300,6 +303,21 @@ function _M:submit_data(data, pad, last)
         return nil, "connection send window is not enough"
     end
 
+    if last then
+        if state == STATE_OPEN then
+            self.state = STATE_HALF_CLOSED_LOCAL
+        else
+            self.state = STATE_CLOSED
+        end
+
+        local peer_state = self.peer_state
+        if peer_state == STATE_OPEN then
+            self.peer_state = STATE_HALF_CLOSED_REMOTE
+        else
+            self.peer_state = STATE_CLOSED
+        end
+    end
+
     self.session.send_window = session_send_window - length
     self.send_window = self_send_window - length
 
@@ -326,6 +344,7 @@ function _M:rst(code)
     -- maybe it is improper and shoule be postponed
     -- until the frame was reall sent.
     self.state = STATE_CLOSED
+    self.peer_state = STATE_CLOSED
 
     session.closed_streams = session.closed_streams + 1
 end
@@ -361,6 +380,7 @@ function _M.new(sid, weight, session)
         stream = {
             sid = sid,
             state = _M.STATE_IDLE,
+            peer_state = _M.STATE_IDLE,
             data = new_tab(1, 0),
             parent = session.root,
             next_sibling = nil,

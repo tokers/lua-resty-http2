@@ -196,8 +196,8 @@ function rst.unpack(rf, src, stream)
         return nil, h2_error.PROTOCOL_ERROR
     end
 
-    local state = stream.state
-    if state == h2_stream.STATE_IDLE then
+    local peer_state = stream.peer_state
+    if peer_state == h2_stream.STATE_IDLE then
         debug_log("server sent RST_STREAM frame for stream: ", sid,
                   " with invalid state")
         return nil, h2_error.PROTOCOL_ERROR
@@ -213,6 +213,7 @@ function rst.unpack(rf, src, stream)
     rf.error_code = unpack_u32(byte(src, 1, 4))
 
     stream.state = h2_stream.STATE_CLOSED
+    stream.peer_state = h2_stream.STATE_CLOSED
 
     local session = stream.session
     session.closed_streams = session.closed_streams + 1
@@ -562,10 +563,12 @@ function headers.unpack(hf, src, stream)
     end
 
     local state = stream.state
-    if state ~= h2_stream.STATE_OPEN and
-       state ~= h2_stream.STATE_IDLE and
-       state ~= h2_stream.STATE_REVERSED_LOCAL and
-       state ~= h2_stream.STATE_HALF_CLOSED_REMOTE
+    local peer_state = stream.peer_state
+
+    if peer_state ~= h2_stream.STATE_OPEN and
+       peer_state ~= h2_stream.STATE_IDLE and
+       peer_state ~= h2_stream.STATE_REVERSED_LOCAL and
+       peer_state ~= h2_stream.STATE_HALF_CLOSED_REMOTE
     then
         debug_log("server sent HEADERS frame for stream ", sid,
                   " with invalid state")
@@ -635,12 +638,24 @@ function headers.unpack(hf, src, stream)
     if hd.FLAG_END_STREAM then
         if state == h2_stream.STATE_OPEN then
             stream.state = h2_stream.STATE_HALF_CLOSED_REMOTE
+
         elseif state == h2_stream.STATE_IDLE then
             stream.state = h2_stream.STATE_OPEN
             session.idle_streams = session.idle_streams - 1
+
         else
             session.closed_streams = session.closed_streams + 1
             stream.state = h2_stream.STATE_CLOSED
+        end
+
+        if peer_state == h2_stream.STATE_OPEN then
+            stream.peer_state = h2_stream.HALF_CLOSED_LOCAL
+
+        elseif state == h2_stream.STATE_IDLE then
+            stream.peer_state = h2_stream.STATE_OPEN
+
+        else
+            stream.peer_state = h2_stream.STATE_CLOSED
         end
     end
 
@@ -798,8 +813,10 @@ function data.unpack(df, src, stream)
     end
 
     local state = stream.state
-    if state ~= h2_stream.STATE_OPEN and
-       state ~= h2_stream.STATE_HALF_CLOSED_LOCAL
+    local peer_state = stream.peer_state
+
+    if peer_state ~= h2_stream.STATE_OPEN and
+       peer_state ~= h2_stream.STATE_HALF_CLOSED_REMOTE
     then
         debug_log("server sent DATA frame for stream ", sid,
                   " with invalid state")
@@ -837,6 +854,12 @@ function data.unpack(df, src, stream)
         else
             session.closed_streams = session.closed_streams + 1
             stream.state = h2_stream.STATE_CLOSED
+        end
+
+        if peer_state == h2_stream.STATE_OPEN then
+            stream.peer_state = h2_stream.STATE_HALF_CLOSED_LOCAL
+        else
+            stream.peer_state = h2_stream.STATE_CLOSED
         end
     end
 
