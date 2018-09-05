@@ -103,19 +103,20 @@ local function handle_frame(self, session)
         return session:flush_queue()
     end
 
+    local end_stream = frame.header.flag_end_stream
     local abort = false
 
     local headers = typ == h2_frame.HEADERS_FRAME or h2_frame.CONTINUATION_FRAME
     if headers and frame.header.flag_end_headers then
-        if self.on_headers_reach(session.ctx, frame.block_frags) then
+        if self.on_headers_reach(session.ctx, frame.block_frags)
+           or end_stream
+        then
             abort = true
         end
     end
 
     if typ == h2_frame.DATA_FRAME then
-        if self.on_data_reach(session.ctx, frame.payload) or
-           h2_frame.flag_end_stream
-        then
+        if self.on_data_reach(session.ctx, frame.payload) or end_stream then
             abort = true
         end
 

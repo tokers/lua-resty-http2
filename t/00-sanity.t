@@ -14,7 +14,7 @@ our $http_config = << 'EOC';
         }
 
         location = /t3 {
-            http2_chunk_size 128;
+            http2_chunk_size 256;
             content_by_lua_block {
                 local data = {}
                 for i = 48, 120 do
@@ -131,8 +131,6 @@ GET /t
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
                 assert(not length or length == "11")
-
-                return true
             end
 
             local on_data_reach = function(ctx, data)
@@ -206,12 +204,12 @@ GET /t
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
                 assert(not length or length == "0")
-
-                return true
             end
 
             local on_data_reach = function(ctx, data)
-                error("unexpected DATA frame")
+                if #data > 0 then
+                    error("unexpected DATA frame")
+                end
             end
 
             local sock = ngx.socket.tcp()
@@ -279,8 +277,6 @@ GET /t
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
                 assert(not length or length == "3650")
-
-                return true
             end
 
             local data_frame_count = 0
@@ -321,7 +317,7 @@ GET /t
                 return
             end
 
-            -- assert(data_frame_count == 50)
+            assert(data_frame_count == 51)
 
             ngx.print("OK")
         }
