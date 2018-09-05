@@ -98,6 +98,7 @@ local function handle_frame(self, session)
     if typ == h2_frame.SETTINGS_FRAME and not frame.header.flag_ack then
         -- response to the server's SETTINGS frame
         local settings_frame = h2_frame.settings.new(h2_frame.FLAG_ACK, nil)
+        session.ack_peer_settings = true
         session:frame_queue(settings_frame)
         return session:flush_queue()
     end
@@ -116,6 +117,15 @@ local function handle_frame(self, session)
            h2_frame.flag_end_stream
         then
             abort = true
+        end
+
+        if session.output_queue_size > 0 then
+            -- flush the WINDOW_UPDATE frame as soon as possible
+            local ok, flush_err = session:flush_queue()
+            if not ok then
+                debug_log("failed to flush frames: ", flush_err)
+                return nil, err
+            end
         end
     end
 
@@ -167,6 +177,14 @@ end
 
 function _M:process()
     local session = self.session
+
+    while not session.ack_peer_settings do
+        local ok, err = handle_frame(self, session)
+        if not ok then
+            return nil, err
+        end
+    end
+
     local prepare_request = self.prepare_request
 
     local headers, data = prepare_request(session.ctx)

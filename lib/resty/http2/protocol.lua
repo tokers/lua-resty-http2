@@ -73,6 +73,7 @@ local function init(self, preread_size, max_concurrent_stream)
     end
 
     self.recv_window = h2_stream.MAX_WINDOW
+    self.preread_size = preread_size
 
     self:frame_queue(sf)
     self:frame_queue(wf)
@@ -121,6 +122,8 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
         incomplete_headers = false,
 
         current_sid = nil,
+
+        ack_peer_settings = false,
 
         output_queue = nil,
         output_queue_size = 0,
@@ -223,6 +226,10 @@ end
 
 -- submit a request
 function _M:submit_request(headers, priority, pad)
+    if not self.ack_peer_settings then
+        return nil, "peer's settings aren't acknowledged yet"
+    end
+
     if #headers == 0 then
         return nil, "empty headers"
     end
