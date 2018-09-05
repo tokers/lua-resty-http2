@@ -274,29 +274,6 @@ function _M:submit_window_update(incr)
 end
 
 
-function _M:want_read()
-    local total = self.total_streams
-    local closed = self.closed_streams
-    local idle = self.idle_streams
-
-    if total - closed - idle > 0 then
-        -- still has some active streams
-        return true
-    end
-
-    return not self.goaway_received
-end
-
-
-function _M:want_write()
-    if self.goaway_sent then
-        return false
-    end
-
-    return self.output_queue_size > 0
-end
-
-
 -- all the frame payload will be read, thereby a proper preread_size is needed .
 -- note WINDOW_UPDATE, RST_STREAM or GOAWAY frame will be sent automatically
 -- (if necessary).
