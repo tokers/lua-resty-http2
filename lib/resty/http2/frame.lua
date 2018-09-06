@@ -55,7 +55,6 @@ local _M = {
 
 local header = {} -- frame header
 local priority = {} -- priority frame
-local rst = {} -- rst frame
 local settings = {} -- settings frame
 local ping = {} -- ping frame
 local goaway = {} -- goaway frame
@@ -182,13 +181,13 @@ function priority.unpack(pf, src, stream)
 end
 
 
-function rst.pack(rf, dst)
+function rst_stream.pack(rf, dst)
     header.pack(rf.header, dst)
     pack_u32(rf.error_code, dst)
 end
 
 
-function rst.unpack(rf, src, stream)
+function rst_stream.unpack(rf, src, stream)
     local sid = rf.header.id
     if sid == 0x0 then
         debug_log("server sent RST_STREAM frame with ",
@@ -222,7 +221,7 @@ function rst.unpack(rf, src, stream)
 end
 
 
-function rst.new(error_code, sid)
+function rst_stream.new(error_code, sid)
     local hd = header.new(4, RST_STREAM_FRAME, FLAG_NONE, sid)
 
     return {
@@ -773,17 +772,6 @@ function continuation.new(frags, end_headers, sid)
         block_frags = frags,
         next = nil,
     }
-end
-
-
-function rst_stream.pack(rf, dst)
-    header.pack(rf, dst)
-    pack_u32(rf.error_code, dst)
-end
-
-
-function rst_stream.unpack(rf, src)
-    rf.error_code = unpack_u32(byte(src, 1, 4))
 end
 
 

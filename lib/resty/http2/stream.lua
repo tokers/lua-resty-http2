@@ -241,7 +241,7 @@ function _M:submit_headers(headers, end_stream, priority, pad)
 
         buffer[#buffer + 1] = hpack.incr_indexed(0)
         hpack.encode(name, buffer, true)
-        hpack.encode(value, buffer, true)
+        hpack.encode(value, buffer, false)
 
         ::continue::
     end
