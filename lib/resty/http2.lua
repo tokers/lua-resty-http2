@@ -193,7 +193,7 @@ function _M:process()
         return nil, "empty headers"
     end
 
-    local stream, err = session:submit_request(headers, nil, nil)
+    local stream, err = session:submit_request(headers, data == nil, nil, nil)
     local ok, flush_err = session:flush_queue()
 
     if not ok then

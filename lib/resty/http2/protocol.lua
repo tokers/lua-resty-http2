@@ -225,7 +225,7 @@ end
 
 
 -- submit a request
-function _M:submit_request(headers, priority, pad)
+function _M:submit_request(headers, no_body, priority, pad)
     if not self.ack_peer_settings then
         return nil, "peer's settings aren't acknowledged yet"
     end
@@ -257,7 +257,7 @@ function _M:submit_request(headers, priority, pad)
     end
 
     local ok
-    ok, err = stream:submit_headers(headers, false, priority, pad)
+    ok, err = stream:submit_headers(headers, no_body, priority, pad)
     if not ok then
         return nil, err
     end
