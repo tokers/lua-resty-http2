@@ -472,6 +472,8 @@ function _M:decode(dst)
         return true
     end
 
+    self.cached = nil
+
     local index_type
     local size_update = false
     local prefix

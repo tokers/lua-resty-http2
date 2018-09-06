@@ -354,4 +354,30 @@ function _M:close(code, debug_data)
 end
 
 
+function _M:detach()
+    self.recv = nil
+    self.send = nil
+    self.ctx = nil
+    self.current_sid = nil
+    self.done = false
+end
+
+
+function _M:attach(recv, send, ctx)
+    if not recv then
+        return nil, "empty read handler"
+    end
+
+    if not send then
+        return nil, "empty write handler"
+    end
+
+    self.recv = recv
+    self.send = send
+    self.ctx = ctx
+
+    return true
+end
+
+
 return _M

@@ -7,12 +7,14 @@ local util = require "resty.http2.util"
 
 local is_func = util.is_func
 local debug_log = util.debug_log
+local new_tab = util.new_tab
 local sub = string.sub
 local min = math.min
 local setmetatable = setmetatable
 
 local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
+local session_pool = new_tab(0, 4)
 
 
 local function get_data_wrapper(data)
@@ -108,15 +110,13 @@ local function handle_frame(self, session)
 
     local headers = typ == h2_frame.HEADERS_FRAME or h2_frame.CONTINUATION_FRAME
     if headers and frame.header.flag_end_headers then
-        if self.on_headers_reach(session.ctx, frame.block_frags)
-           or end_stream
-        then
+        if self.on_headers_reach(session.ctx, frame.block_frags) then
             abort = true
         end
     end
 
     if typ == h2_frame.DATA_FRAME then
-        if self.on_data_reach(session.ctx, frame.payload) or end_stream then
+        if self.on_data_reach(session.ctx, frame.payload) then
             abort = true
         end
 
@@ -131,6 +131,10 @@ local function handle_frame(self, session)
     end
 
     if not abort then
+        if end_stream and frame.header.id > 0x0 then
+            session.done = true
+        end
+
         return true
     end
 
@@ -150,6 +154,7 @@ function _M.new(opts)
     local prepare_request = opts.prepare_request
     local on_headers_reach = opts.on_headers_reach
     local on_data_reach = opts.on_data_reach
+    local key = opts.key
 
     if not is_func(prepare_request) then
         return nil, "prepare_request must be a Lua function"
@@ -159,10 +164,23 @@ function _M.new(opts)
         return nil, "on_headers_reach must be a Lua function"
     end
 
-    local session, err = h2_protocol.session(recv, send, ctx, preread_size,
-                                             max_concurrent_stream)
-    if not session then
-        return nil, err
+    local session
+    local err
+
+    if key and session_pool[key] then
+        session = session_pool[key]
+        session_pool[key] = nil
+        ok, err = session:attach(recv, send, ctx)
+        if not ok then
+            return nil, err
+        end
+
+    else
+        session, err = h2_protocol.session(recv, send, ctx, preread_size,
+                                           max_concurrent_stream)
+        if not session then
+            return nil, err
+        end
     end
 
     local client = {
@@ -173,6 +191,13 @@ function _M.new(opts)
     }
 
     return setmetatable(client, mt)
+end
+
+
+function _M:keepalive(key)
+    local session = self.session
+    session:detach()
+    session_pool[key] = session
 end
 
 
@@ -194,8 +219,12 @@ function _M:process()
     end
 
     local stream, err = session:submit_request(headers, data == nil, nil, nil)
-    local ok, flush_err = session:flush_queue()
+    if not stream then
+        debug_log("failed to submit_request: ", err)
+        return nil, err
+    end
 
+    local ok, flush_err = session:flush_queue()
     if not ok then
         debug_log("failed to flush frames: ", err)
         return nil, flush_err
@@ -247,6 +276,10 @@ function _M:process()
         ok, err = handle_frame(self, session)
         if not ok then
             return nil, err
+        end
+
+        if session.done then
+            break
         end
 
         if session.goaway_sent or session.goaway_received then
