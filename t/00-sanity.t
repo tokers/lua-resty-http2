@@ -329,3 +329,74 @@ GET /t
 --- response_body: OK
 --- no_error_log
 [error]
+
+
+
+=== TEST 5: HEAD request
+
+--- http_config eval: $::http_config
+--- config
+    location = /t {
+        content_by_lua_block {
+            local http2 = require "resty.http2"
+            local headers = {
+                { name = ":authority", value = "test.com" },
+                { name = ":method", value = "HEAD" },
+                { name = ":path", value = "/t1" },
+                { name = ":scheme", value = "http" },
+            }
+
+            local prepare_request = function() return headers end
+            local on_headers_reach = function(ctx, headers)
+                assert(headers[":status"] == "200")
+                local length = headers["content-length"]
+                assert(not length or length == "0")
+            end
+
+            local on_data_reach = function(ctx, data)
+                error("unexpected DATA frame")
+            end
+
+            local sock = ngx.socket.tcp()
+            local ok, err = sock:connect("127.0.0.1", 8083)
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local client, err = http2.new {
+                ctx = sock,
+                recv = sock.receive,
+                send = sock.send,
+                prepare_request = prepare_request,
+                on_headers_reach = on_headers_reach,
+                on_data_reach = on_data_reach,
+            }
+
+            if not client then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local ok, err = client:process()
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local ok, err = sock:close()
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            ngx.print("OK")
+        }
+    }
+
+--- request
+GET /t
+
+--- response_body: OK
+--- no_error_log
+[error]
