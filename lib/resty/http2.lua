@@ -166,6 +166,7 @@ function _M.new(opts)
 
     local session
     local err
+    local ok
 
     if key and session_pool[key] then
         session = session_pool[key]
