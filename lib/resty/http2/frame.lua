@@ -922,7 +922,6 @@ end
 
 _M.header = header
 _M.priority = priority
-_M.rst = rst
 _M.settings = settings
 _M.ping = ping
 _M.goaway = goaway
