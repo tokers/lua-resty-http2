@@ -94,6 +94,18 @@ This pure Lua library implements the client side HTTP/2 protocol, but not all
 details are covered, for example, the stream dependencies is maintained but
 never used.
 
+There are some inherent limitations which are not solved, however.
+
+**Cannot be used over the SSL/TLS handshaked connections**. The `tcpsock:sslhandshake` doesn't support the ALPN or NPN extensions,
+so currently only the plain connections can be used, the library will start
+HTTP/2 session with sending the connection preface, i.e. the string:
+
+```
+PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n
+```
+
+Perhaps this awkward situation can be solved in the future if the ALPN or NPN extensions are supported.
+
 [Back to TOC](#table-of-contents)
 
 
