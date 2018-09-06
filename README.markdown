@@ -11,6 +11,8 @@ Table of Contents
 * [Name](#name)
 * [Status](#status)
 * [Synopsis](#synopsis)
+* [Description](#description)
+* [API Implemented](#api-implemented)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -23,7 +25,7 @@ This Lua module is currently considered experimental.
 Synopsis
 ========
 
-```
+```lua
 local http2 = require "resty.http2"
 
 local host = "127.0.0.1"
@@ -35,6 +37,8 @@ if not ok then
     return
 end
 
+-- Prepare request headers and body
+-- body can be a Lua string or a Lua function
 local prepare_request = function()
     local headers = {
         { name = ":authority", value = "test.com" },
@@ -83,10 +87,27 @@ sock:close()
 
 As a more formal exemplify, please read the [util/example.lua](util/example.lua).
 
+Description
+===========
+
+This pure Lua library implements the client side HTTP/2 protocol, but not all
+details are covered, for example, the stream dependencies is maintained but
+never used.
+
+[Back to TOC](#table-of-contents)
+
+
+API Implemented
+===============
+
+[Back to TOC](#table-of-contents)
+
 Author
 ======
 
 Alex Zhang (张超) zchao1995@gmail.com, UPYUN Inc.
+
+[Back to TOC](#table-of-contents)
 
 
 Copyright and License
@@ -94,9 +115,13 @@ Copyright and License
 
 Please see the [LICENSE](LICENSE) file.
 
+[Back to TOC](#table-of-contents)
+
 See Also
 ========
 
 * upyun-resty: https://github.com/upyun/upyun-resty
 * lua-resty-httpipe: https://github.com/timebug/lua-resty-httpipe
 * lua-resty-requests: https://github.com/tokers/lua-resty-requests
+
+[Back to TOC](#table-of-contents)
