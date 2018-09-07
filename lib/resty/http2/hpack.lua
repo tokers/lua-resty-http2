@@ -174,8 +174,7 @@ local function parse_int(buffer, current, prefix)
     end
 
     local count = 0
-
-    value = 0
+    local shift = 0
 
     while true do
         if buffer.pos == buffer.last then
@@ -190,13 +189,14 @@ local function parse_int(buffer, current, prefix)
         local b = band(byte(buffer.data, pos, pos), 0xff)
         buffer.pos = pos + 1
 
-        value = blshift(value, 7) + band(b, 0x7f)
+        value = blshift(band(b, 0x7f), shift) + value
 
         if b < 128 then
             return value
         end
 
         count = count + 1
+        shift = shift + 7
 
         -- length is too large
         if count > 4 then
