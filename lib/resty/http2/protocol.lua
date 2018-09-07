@@ -94,7 +94,6 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
 
     local _, err = send(ctx, HTTP2_PREFACE)
     if err then
-        self.fatal = true
         return nil, err
     end
 
