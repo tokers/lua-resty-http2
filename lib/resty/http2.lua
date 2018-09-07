@@ -197,6 +197,11 @@ end
 
 function _M:keepalive(key)
     local session = self.session
+
+    if session.goaway_sent or session.goaway_received or session.fatal then
+        return
+    end
+
     session:detach()
     session_pool[key] = session
 end

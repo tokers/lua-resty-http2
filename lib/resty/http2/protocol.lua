@@ -94,6 +94,7 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
 
     local _, err = send(ctx, HTTP2_PREFACE)
     if err then
+        self.fatal = true
         return nil, err
     end
 
@@ -123,6 +124,7 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
 
         current_sid = nil,
 
+        fatal = false,
         ack_peer_settings = false,
 
         output_queue = nil,
@@ -217,6 +219,7 @@ function _M:flush_queue()
 
     local _, err = self.send(self.ctx, send_buffer)
     if err then
+        self.fatal = true
         return nil, err
     end
 
@@ -288,6 +291,7 @@ function _M:recv_frame()
     while true do
         local bytes, err = recv(ctx, h2_frame.HEADER_SIZE)
         if err then
+            self.fatal = true
             return nil, err
         end
 
@@ -296,6 +300,7 @@ function _M:recv_frame()
 
         bytes, err = recv(ctx, hd.length) -- read the payload
         if err then
+            self.fatal = true
             return nil, err
         end
 
