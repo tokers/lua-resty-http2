@@ -86,7 +86,6 @@ __DATA__
                 ngx.log(ngx.ERR, err)
                 return
             end
-
         }
     }
 
