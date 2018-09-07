@@ -19,12 +19,12 @@ Table of Contents
     * [client:keepalive](#clientkeepalive)
   * [resty.http2.protocol](#restyhttp2protocol)
     * [protocol.session](#protocolsession)
-    * [session:adjust_window](#sessionadjustwindow)
-    * [session:frame_queue](#sessionframequeue)
-    * [session:flush_queue](#sessionflushqueue)
-    * [session:submit_request](#sessionsubmitrequest)
-    * [session:submit_window_update](#sessionsubmitwindowupdate)
-    * [session:recv_frame](#sessionrecvframe)
+    * [session:adjust_window](#sessionadjust_window)
+    * [session:frame_queue](#sessionframe_queue)
+    * [session:flush_queue](#sessionflush_queue)
+    * [session:submit_request](#sessionsubmit_request)
+    * [session:submit_window_update](#sessionsubmit_window_update)
+    * [session:recv_frame](#sessionrecv_frame)
     * [session:close](#sessionclose)
     * [session:detach](#sessiondetach)
     * [session:attach](#sessionattach)
@@ -306,7 +306,7 @@ string which described the error reason will be given.
 
 [Back to TOC](#table-of-contents)
 
-### session:submit_request(headers, no_body, priority, pad)
+### session:submit_request
 
 **syntax**: *local ok, err = session:submit_request(headers, no_body, priority?, pad?)*
 
