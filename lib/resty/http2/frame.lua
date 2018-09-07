@@ -982,7 +982,7 @@ _M.unpack = {
     [PING_FRAME] = ping.unpack,
     [GOAWAY_FRAME] = goaway.unpack,
     [WINDOW_UPDATE_FRAME] = window_update.unpack,
-    [CONTINUATION_FRAME] = continuation.pack,
+    [CONTINUATION_FRAME] = continuation.unpack,
     [PUSH_PROMISE_FRAME] = push_promise.unpack,
 }
 

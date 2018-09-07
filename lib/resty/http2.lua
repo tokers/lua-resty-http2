@@ -152,6 +152,7 @@ function _M.new(opts)
     local preread_size = opts.preread_size
     local max_concurrent_stream = opts.max_concurrent_stream
     local prepare_request = opts.prepare_request
+    local max_frame_size = opts.max_frame_size
     local on_headers_reach = opts.on_headers_reach
     local on_data_reach = opts.on_data_reach
     local key = opts.key
@@ -162,6 +163,13 @@ function _M.new(opts)
 
     if not is_func(on_headers_reach) then
         return nil, "on_headers_reach must be a Lua function"
+    end
+
+    if max_frame_size and
+       (max_frame_size > h2_frame.MAX_FRAME_SIZE or
+        max_frame_size < h2_frame.DEFAULT_FRAME_SIZE)
+    then
+        return nil, "incorrect max_frame_size value"
     end
 
     local session
@@ -178,7 +186,8 @@ function _M.new(opts)
 
     else
         session, err = h2_protocol.session(recv, send, ctx, preread_size,
-                                           max_concurrent_stream)
+                                           max_concurrent_stream,
+                                           max_frame_size)
         if not session then
             return nil, err
         end

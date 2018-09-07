@@ -156,9 +156,11 @@ local data, err = recv(ctx, size)
 local ok, err = send(ctx, data)
 ```
 
-* `preread_size`, a Lua number which influences the peer's initial send window size (advertise through the SETTINGS frame);
+* `preread_size`, a Lua number which influences the peer's initial send window size (advertise through the SETTINGS frame), default is 65535;
 
-* `max_concurrent_stream`, a Lua number which limits the max concurrent streams in a HTTP/2 session;
+* `max_concurrent_stream`, a Lua number which limits the max concurrent streams in a HTTP/2 session, default is 128;
+
+* `max_frame_size`, a Lua number which limits the max frame size that peer can send, default is 16777215.
 
 * `prepare_request`, a Lua function, which is used to generate the pending HTTP request headers and request body, it will be called like:
 

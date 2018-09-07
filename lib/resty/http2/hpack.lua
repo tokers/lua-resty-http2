@@ -167,7 +167,7 @@ local function table_account(hpack, size)
 end
 
 
-local function parse_int(buffer, current, prefix)
+local function parse_int(self, current, prefix)
     local value = band(current, prefix)
     if value ~= prefix then
         return value
@@ -177,17 +177,17 @@ local function parse_int(buffer, current, prefix)
     local shift = 0
 
     while true do
-        if buffer.pos == buffer.last then
-            buffer = buffer.next
-            if not buffer then
+        if self.buffer.pos == self.buffer.last then
+            self.buffer = self.buffer.next
+            if not self.buffer then
                 debug_log("server sent header block with incorrect length")
                 return
             end
         end
 
-        local pos = buffer.pos
-        local b = band(byte(buffer.data, pos, pos), 0xff)
-        buffer.pos = pos + 1
+        local pos = self.buffer.pos
+        local b = band(byte(self.buffer.data, pos, pos), 0xff)
+        self.buffer.pos = pos + 1
 
         value = blshift(band(b, 0x7f), shift) + value
 
@@ -207,32 +207,32 @@ local function parse_int(buffer, current, prefix)
 end
 
 
-local function parse_raw(buffer, length)
+local function parse_raw(self, length)
     local data = new_tab(2, 0)
     while length > 0 do
-        if not buffer then
+        if not self.buffer then
             break
         end
 
-        local pos = buffer.pos
-        local last = buffer.last
+        local pos = self.buffer.pos
+        local last = self.buffer.last
         local size = last - pos
         if size >= length then
-            data[#data + 1] = sub(buffer.data, pos, pos + length - 1)
-            buffer.pos = pos + length
+            data[#data + 1] = sub(self.buffer.data, pos, pos + length - 1)
+            self.buffer.pos = pos + length
             length = 0
             break
         end
 
         -- size < length
         if pos == 1 then
-            data[#data + 1] = buffer.data
+            data[#data + 1] = self.buffer.data
         else
-            data[#data + 1] = sub(buffer.data, pos, last - 1)
+            data[#data + 1] = sub(self.buffer.data, pos, last - 1)
         end
 
         length = length - size
-        buffer = buffer.next
+        self.buffer = self.buffer.next
     end
 
     if length > 0 then
@@ -244,7 +244,7 @@ local function parse_raw(buffer, length)
 end
 
 
-local function parse_huff(hpack, buffer, length)
+local function parse_huff(hpack, length)
     if huff_data_len < length then
         huff_data = new_tab(length, 0)
         huff_data_len = length
@@ -253,16 +253,16 @@ local function parse_huff(hpack, buffer, length)
     end
 
     while true do
-        if not buffer then
+        if not hpack.buffer then
             break
         end
 
-        local pos = buffer.pos
-        local last = buffer.last
+        local pos = hpack.buffer.pos
+        local last = hpack.buffer.last
         local size = last - pos
         if size >= length then
-            local src = sub(buffer.data, pos, pos + length - 1)
-            buffer.pos = pos + length
+            local src = sub(hpack.buffer.data, pos, pos + length - 1)
+            hpack.buffer.pos = pos + length
 
             local ok, err = hpack.decode_state:decode(src, huff_data, true)
             if not ok then
@@ -277,12 +277,13 @@ local function parse_huff(hpack, buffer, length)
 
         local src
         if pos == 1 then
-            src = buffer.data
+            src = hpack.buffer.data
         else
-            src = sub(buffer.data, pos, pos + size - 1)
+            src = sub(hpack.buffer.data, pos, pos + size - 1)
         end
 
-        buffer = buffer.next
+        hpack.buffer = hpack.buffer.next
+        length = length - size
 
         local ok, err = hpack.decode_state:decode(src, huff_data, false)
         if not ok then
@@ -292,7 +293,7 @@ local function parse_huff(hpack, buffer, length)
     end
 
     if length > 0 then
-        debug_log("server sent incomplet header block")
+        debug_log("server sent incomplete header block")
         return
     end
 
@@ -300,21 +301,21 @@ local function parse_huff(hpack, buffer, length)
 end
 
 
-local function parse_value(hpack, buffer)
-    if buffer.pos == buffer.last then
-        buffer = buffer.next
-        if not buffer then
+local function parse_value(hpack)
+    if hpack.buffer.pos == hpack.buffer.last then
+        hpack.buffer = hpack.buffer.next
+        if not hpack.buffer then
             debug_log("server sent incomplete header block")
             return
         end
     end
 
-    local pos = buffer.pos
-    local ch = band(byte(buffer.data, pos, pos), 0xff)
-    buffer.pos = pos + 1
+    local pos = hpack.buffer.pos
+    local ch = band(byte(hpack.buffer.data, pos, pos), 0xff)
+    hpack.buffer.pos = pos + 1
 
     local huff = ch >= 128
-    local value = parse_int(buffer, ch, 127)
+    local value = parse_int(hpack, ch, 127)
     if not value then
         return
     end
@@ -322,10 +323,10 @@ local function parse_value(hpack, buffer)
     debug_log("string length: ", value, " huff: ", huff)
 
     if not huff then
-        return parse_raw(buffer, value)
+        return parse_raw(hpack, value)
     end
 
-    return parse_huff(hpack, buffer, value)
+    return parse_huff(hpack, value)
 end
 
 
@@ -363,6 +364,7 @@ function _M.new(size)
         static = hpack_static_table,
         dynamic = dynamic,
         cached = nil,
+        buffer = nil,
         last_cache = nil,
         decode_state = huffdec.new_state(),
     }, mt)
@@ -473,19 +475,20 @@ function _M:decode(dst)
     end
 
     self.cached = nil
+    self.buffer = buffer
 
     local index_type
     local size_update = false
     local prefix
 
     while true do
-        local pos = buffer.pos
-        if pos == buffer.last then
+        local pos = self.buffer.pos
+        if pos == self.buffer.last then
             break
         end
 
-        local ch = band(byte(buffer.data, pos), 0xff)
-        buffer.pos = pos + 1
+        local ch = band(byte(self.buffer.data, pos), 0xff)
+        self.buffer.pos = pos + 1
 
         if ch >= 128 then -- indexed header field
             prefix = 127
@@ -508,7 +511,7 @@ function _M:decode(dst)
             index_type = HPACK_WITHOUT_INDEXING
         end
 
-        local value = parse_int(buffer, ch, prefix)
+        local value = parse_int(self, ch, prefix)
         if not value then
             return nil, h2_error.COMPRESSION_ERROR
         end
@@ -541,13 +544,13 @@ function _M:decode(dst)
                 header_name = entry.name
 
             else
-                header_name = parse_value(self, buffer)
+                header_name = parse_value(self)
                 if not header_name then
                     return nil, h2_error.COMPRESSION_ERROR
                 end
             end
 
-            header_value = parse_value(self, buffer)
+            header_value = parse_value(self)
             if not header_value then
                 return nil, h2_error.COMPRESSION_ERROR
             end

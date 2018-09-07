@@ -47,14 +47,15 @@ end
 
 -- send the default settings and advertise the window size
 -- for the whole connection
-local function init(self, preread_size, max_concurrent_stream)
-    preread_size = preread_size or self.preread_size
-    max_concurrent_stream = max_concurrent_stream or DEFAULT_MAX_STREAMS
+local function init(self)
+    local preread_size = self.preread_size
+    local max_frame_size = self.max_frame_size
+    local max_streams = self.max_streams
 
     local payload = {
-        { id = MAX_STREAMS_SETTING, value = max_concurrent_stream },
+        { id = MAX_STREAMS_SETTING, value = max_streams },
         { id = INIT_WINDOW_SIZE_SETTING, value = preread_size },
-        { id = MAX_FRAME_SIZE_SETTING, value = DEFAULT_MAX_FRAME_SIZE },
+        { id = MAX_FRAME_SIZE_SETTING, value = max_frame_size },
         { id = ENABLE_PUSH_SETTING, value = 0 },
     }
 
@@ -73,7 +74,6 @@ local function init(self, preread_size, max_concurrent_stream)
     end
 
     self.recv_window = h2_stream.MAX_WINDOW
-    self.preread_size = preread_size
 
     self:frame_queue(sf)
     self:frame_queue(wf)
@@ -83,7 +83,7 @@ end
 
 
 -- create a new http2 session
-function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
+function _M.session(recv, send, ctx, preread_size, max_streams, max_frame_size)
     if not recv then
         return nil, "empty read handler"
     end
@@ -101,9 +101,9 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
         send_window = DEFAULT_WINDOW_SIZE,
         recv_window = DEFAULT_WINDOW_SIZE,
         init_window = DEFAULT_WINDOW_SIZE,
-        preread_size = DEFAULT_WINDOW_SIZE,
-        max_stream = DEFAULT_MAX_STREAMS,
-        max_frame_size = DEFAULT_MAX_FRAME_SIZE,
+        preread_size = preread_size or DEFAULT_WINDOW_SIZE,
+        max_streams = max_streams or DEFAULT_MAX_STREAMS,
+        max_frame_size = max_frame_size or DEFAULT_MAX_FRAME_SIZE,
 
         recv = recv, -- handler for reading data
         send = send, -- handler for writing data
@@ -141,7 +141,7 @@ function _M.session(recv, send, ctx, preread_size, max_concurrent_stream)
     session.stream_map[0] = session.root
 
     local ok
-    ok, err = init(session, preread_size, max_concurrent_stream)
+    ok, err = init(session)
     if not ok then
         debug_log("failed to send SETTINGS frame: ", err)
         return nil, err
