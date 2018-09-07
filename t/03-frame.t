@@ -11,7 +11,7 @@ our $http_config = << 'EOC';
             header_filter_by_lua_block {
                 local cookie = {}
 
-                for i = 1, 20000 do
+                for i = 1, 50000 do
                     cookie[i] = string.char(math.random(48, 97))
                 end
 
@@ -22,7 +22,7 @@ our $http_config = << 'EOC';
 EOC
 
 
-repeat_each(1);
+repeat_each(3);
 plan tests => repeat_each() * blocks() * 3;
 no_long_string();
 run_tests();
@@ -46,7 +46,7 @@ __DATA__
 
             local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
-                assert(#headers["cookie"] == 20000)
+                assert(#headers["cookie"] == 50000)
             end
 
             local on_data_reach = function(ctx, data)
