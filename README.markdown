@@ -17,6 +17,17 @@ Table of Contents
     * [http2.new](#http2new)
     * [client:process](#clientprocess)
     * [client:keepalive](#clientkeepalive)
+  * [resty.http2.protocol](#restyhttp2protocol)
+    * [protocol.session](#protocolsession)
+    * [session:adjust_window](#sessionadjustwindow)
+    * [session:frame_queue](#sessionframequeue)
+    * [session:flush_queue](#sessionflushqueue)
+    * [session:submit_request](#sessionsubmitrequest)
+    * [session:submit_window_update](#sessionsubmitwindowupdate)
+    * [session:recv_frame](#sessionrecvframe)
+    * [session:close](#sessionclose)
+    * [session:detach](#sessiondetach)
+    * [session:attach](#sessionattach)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -156,11 +167,11 @@ local data, err = recv(ctx, size)
 local ok, err = send(ctx, data)
 ```
 
-* `preread_size`, a Lua number which influences the peer's initial send window size (advertise through the SETTINGS frame), default is 65535;
+* `preread_size`, a Lua number which influences the peer's initial send window size (advertise through the SETTINGS frame), default is `65535`;
 
-* `max_concurrent_stream`, a Lua number which limits the max concurrent streams in a HTTP/2 session, default is 128;
+* `max_concurrent_stream`, a Lua number which limits the max concurrent streams in a HTTP/2 session, default is `128`;
 
-* `max_frame_size`, a Lua number which limits the max frame size that peer can send, default is 16777215.
+* `max_frame_size`, a Lua number which limits the max frame size that peer can send, default is `16777215`.
 
 * `prepare_request`, a Lua function, which is used to generate the pending HTTP request headers and request body, it will be called like:
 
@@ -198,7 +209,7 @@ local abort = on_data_reach(ctx, data)
 
 The 2nd parameter `data` is a Lua string represents the HTTP respose body received this time.
 
-The meanings of return value is same as the `on_headers_reach`.
+The meaning of return value is same as the `on_headers_reach`.
 
 * `key`, a Lua string which represents which cached HTTP/2 session the callers want to resue, if not found, new HTTP/2 session will be created. See [client:keepalive](client:keepalive) for more details.
 
@@ -242,6 +253,127 @@ sock:connect(host, port, { pool = "h2" })
 sock:setkeepalive(75, 1)
 client:keepalive("test")
 ```
+
+[Back to TOC](#table-of-contents)
+
+resty.http2.protocol
+-------------------
+
+To load this module, just do this:
+
+```lua
+local protocol = require "resty.http2.protocol"
+```
+
+[Back to TOC](#table-of-contents)
+
+### protocol.session
+
+**syntax**: *local session, err = protocol.session(recv, send, ctx, preread_size?, max_concurrent_stream?, max_frame_size?)*
+
+Creates a new HTTP/2 session, in case of failure, `nil` and a Lua string which
+describes the error reason will be given.
+
+The meaning of every parameter is same as these described in [http2.new](#http2new).
+
+The initial SETTINGS frame and WINDOW_UPDATE frame will be sent before this
+function returns.
+
+[Back to TOC](#table-of-contents)
+
+### session:adjust_window
+
+**syntax**: *local ok = session:adjust_window(delta)*
+
+Adjusts each streams send window size, stream will be reset if the altered send window size exceeds MAX_WINDOW_SIZE, in this case, `ok` will be `nil`.
+
+[Back to TOC](#table-of-contents)
+
+### session:frame_queue
+
+**syntax**: *session:frame_queue(frame)*
+
+Appends `frame` to current session's output queue.
+
+[Back to TOC](#table-of-contents)
+
+### session:flush_queue
+
+**syntax**: *local ok, err = session:flush_queue()*
+
+Packs and flushes the queueing frames, in case of failure, `nil` and a Lua
+string which described the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### session:submit_request(headers, no_body, priority, pad)
+
+**syntax**: *local ok, err = session:submit_request(headers, no_body, priority?, pad?)*
+
+Submits a HTTP request to the current HTTP/2 session, in case of failure, `nil`
+and a Lua string which described the error reason wil be given.
+
+Meaning of each parameter:
+
+* `headers`, should be a hash-like Lua table represent the HTTP request headers, it is worth noting that this library doesn't take care of the HTTP headers' semantics, so it's callers' responsibility to supply this, and callers should transform any necessary pesudo headers. For example, `:authority` should be passed rather `Host`;
+
+* `no_body`, a boolean value, indicates whether this request has body. When it
+is true, the generated HEADERS frame will contains the END_HEADERS flag;
+
+* `priority`, a hash-like Lua table, which used to define a custom stream dependencies:
+  * `priority.sid` represents the dependent stream identifier;
+  * `priority.excl`, whether the new stream becomes the sole dependency of the
+  stream indicated by `priority.sid`;
+  * `priority.weight` defines weight of new stream;
+
+* `pad`, the padding data.
+
+[Back to TOC](#table-of-contents)
+
+### session:submit_window_update
+
+**syntax**: *local ok, err = session:submit_window_update(incr)*
+
+Submits a WINDOW_UPDATE frame for the whole HTTP/2 session with an increment `incr`, in case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### session:recv_frame
+
+**syntax**: *local frame, err = session:recv_frame()*
+
+Receives a HTTP/2 frame, in case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+The corresponding action will be taken automatically, for example, GOAWAY frame will be sent if peer violates the HTTP/2 protocol conventions; WINDOW_UPDATE frame will be sent if peer's send window becomes too small.
+
+[Back to TOC](#table-of-contents)
+
+### session:close
+
+**syntax**: *session:close(code?, debug_data?)*
+
+Generates a GOAWAY frame with the error code `code` and debug data `debug_data`, the default error code is NO_ERROR and the debug_data is `nil`.
+
+Note this function just queues the GOAWAY frame to the output queue, callers
+should call `session:flush_queue` to really send the frames.
+
+[Back to TOC](#table-of-contents)
+
+### session:detach
+
+**syntax**: *session:detach()*
+
+Detachs the current HTTP/2 session with the Cosocket object.
+
+[Back to TOC](#table-of-contents)
+
+### session:attach
+
+**syntax**: *local ok, err = session:attach(recv, send, ctx)*
+
+Attachs the current HTTP/2 session with a Cosocket object, in case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+The meanings of `recv`, `send` and `ctx` are same as these described in [http.new](#http2new).
 
 [Back to TOC](#table-of-contents)
 
