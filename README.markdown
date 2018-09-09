@@ -28,6 +28,13 @@ Table of Contents
     * [session:close](#sessionclose)
     * [session:detach](#sessiondetach)
     * [session:attach](#sessionattach)
+  * [resty.http2.stream](#restyhttp2stream)
+    * [h2_stream.new](#h2_streamnew)
+    * [h2_stream.new_root](#h2_streamnew_root)
+    * [stream:submit_headers](#streamsubmit_headers)
+    * [stream:submit_data](#streamsubmit_data)
+    * [stream:submit_window_update](#streamsubmit_window_update)
+    * [stream:set_dependency](#streamset_dependency)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -179,7 +186,13 @@ local ok, err = send(ctx, data)
 local headers, body = prepare_request(ctx)
 ```
 
-the `headers`, should be a hash-like Lua table represent the HTTP request headers, it is worth noting that this library doesn't take care of the HTTP headers' semantics, so it's callers' responsibility to supply this, and callers should transform any necessary pesudo headers. For example, `:authority` should be passed rather `Host`.
+the `headers`, should be a hash-like Lua table represent the HTTP request headers, it is worth noting that this library doesn't take care of the HTTP headers' semantics, so it's callers' responsibility to supply this, and callers should implement any necessary conversions, for example, `Host` should be converted to `:authority`. Also, the following headers will be ignored as they are CONNECTION specific.
+
+  * `Connection`
+  * `Keep-Alive`
+  * `Proxy-Connection`
+  * `Upgrade`
+  * `Transfer-Encoding`
 
 The `body`, can be a Lua string represents the HTTP request body. It also can be a Lua function to implement the stream-way uploading. When `body` is a Lua function, it will be called like:
 
@@ -235,7 +248,7 @@ In case of any abormal return, `ok` will be `nil` and `err` will describe the er
 
 Caches current HTTP/2 session for the reuse, note malformed HTTP/2 session will never be cached. The HTTP/2 session will detached from the connection, precisely, the current Cosocket object.
 
-The detached HTTP/2 session will be saved in an internal hash-like table, the unique parameter `key` will be used to index this session when callers want to reuse it.
+The detached HTTP/2 session will be saved in an internal hash-like Lua table, the unique parameter `key` will be used to index this session when callers want to reuse it.
 
 After set this session as alive, callers should also set the Cosocket object as keepalive.
 
@@ -374,6 +387,99 @@ Detachs the current HTTP/2 session with the Cosocket object.
 Attachs the current HTTP/2 session with a Cosocket object, in case of failure, `nil` and a Lua string which describes the error reason will be given.
 
 The meanings of `recv`, `send` and `ctx` are same as these described in [http.new](#http2new).
+
+[Back to TOC](#table-of-contents)
+
+resty.http2.stream
+------------------
+
+To load this module, just do this:
+
+```lua
+local h2_stream = require "resty.http2.stream"
+```
+
+[Back to TOC](#table-of-contents)
+
+### h2_stream.new
+
+**syntax**: `local stream = h2_stream.new(sid, weight, session)`
+
+Creates a new stream with the identifier `sid`, weight `weight` and the HTTP/2 session which it belongs.
+
+[Back to TOC](#table-of-contents)
+
+### h2_stream.new_root
+
+**syntax**: `local root_stream = h2_stream.new_root(session)`
+
+Creates the root stream with it's session.
+
+The root stream's identifier is `0x0` and is really a virtual stream which is used to manipulate the whole HTTP/2 session.
+
+[Back to TOC](#table-of-contents)
+
+### stream:submit_headers
+
+**syntax**: `local ok, err = stream:submit_headers(headers, end_stream, priority?, pad?)`
+
+Submits some HTTP headers to the stream.
+
+The first parameter `headers`, should be a hash-like Lua table represent the HTTP request headers, it is worth noting that this library doesn't take care of the HTTP headers' semantics, so it's callers' responsibility to supply this, and callers should transform any necessary pesudo headers. For example, `:authority` should be passed rather `Host`;
+
+The `end_stream` parameter should be a boolean value and is used to control whether the HEADERS frame should take the END_STREAM flag, basically callers can set it true if there is no request body need to send.
+
+`priority` should be a hash-like Lua table (if any), which used to define a custom stream dependencies:
+  * `priority.sid` represents the dependent stream identifier;
+  * `priority.excl`, whether the new stream becomes the sole dependency of the
+  stream indicated by `priority.sid`;
+  * `priority.weight` defines weight of new stream;
+
+The last parameter `pad`, represents the padding data.
+
+In case of failure, `nil` and a Lua string which describes the corresponding error will be given.
+
+[Back to TOC](#table-of-contents)
+
+### stream:submit_data
+
+**syntax**: `local ok, err = stream:submit_data(data, pad, last)`
+
+Submits some request body to the stream, `data` should be a Lua string, with optional padding data.
+
+The last parameter `last` is indicated whether this is the last submittion, the current DATA frame will attach the END_STREAM flag if `last` is true.
+
+In case of failure, `nil` and a Lua string which describes the corresponding error will be given.
+
+[Back to TOC](#table-of-contents)
+
+### stream:submit_window_update
+
+**syntax**: *local ok, err = session:submit_window_update(incr)*
+
+Submits a WINDOW_UPDATE frame for the stream with an increment `incr`, in case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### stream:set_dependency
+
+**syntax**: *stream:set_dependency(depend, excl)*
+
+Sets current stream's dependencies to a stream with the identifier `depend`.
+
+The second parameter `excl`, indicates whether current stream will be the sole child of `depend`.
+
+When `depend` is absent, the target stream will be the root and `excl` will be treat as `false`.
+
+[Back to TOC](#table-of-contents)
+
+### stream:rst
+
+**syntax**: *stream:rst(code)*
+
+Generates a RST frame with the error code `code`. In the case of `code` is absent, the NO_ERROR code will be selected.
+
+Note this method just **generates** a RST frame rather than send it, caller should send this frame by calling [session:flush_queue](#sessionflush_queue).
 
 [Back to TOC](#table-of-contents)
 
