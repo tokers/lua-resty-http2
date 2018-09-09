@@ -336,7 +336,9 @@ local function write_length(preface, prefix, value, dst)
         return
     end
 
-    dst[#dst + 1] = char(bor(prefix, prefix))
+    dst[#dst + 1] = char(bor(preface, prefix))
+    value = value - prefix
+
     while value >= 128 do
         dst[#dst + 1] = char(band(value, 0x7f) + 128)
         value = brshift(value, 7)

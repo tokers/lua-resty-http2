@@ -12,6 +12,7 @@ local pairs = pairs
 local is_num = util.is_num
 local is_tab = util.is_tab
 local lower = string.lower
+local sub = string.sub
 local concat = table.concat
 
 local buffer
@@ -246,13 +247,50 @@ function _M:submit_headers(headers, end_stream, priority, pad)
         ::continue::
     end
 
-    local frame, err = h2_frame.headers.new(concat(buffer), priority, pad,
-                                            end_stream, true, sid)
+    local fragment = concat(buffer)
+    local max_frame_size = self.session.max_frame_size
+    local payload = fragment
+    local continue = false
+    local first_piece_size = max_frame_size
+    if priority then
+        first_piece_size = first_piece_size - 5
+    end
+
+    if pad then
+        first_piece_size = first_piece_size - #pad - 1
+    end
+
+    if #fragment > first_piece_size then
+        payload = sub(fragment, 1, first_piece_size)
+        continue = true
+    end
+
+    local frame, err = h2_frame.headers.new(payload, priority, pad,
+                                            end_stream, not continue, sid)
     if not frame then
         return nil, err
     end
 
     self.session:frame_queue(frame)
+
+    if continue then
+        local pos = first_piece_size + 1
+        repeat
+            if pos + max_frame_size - 1 < #fragment then
+                payload = sub(fragment, pos, pos + max_frame_size - 1)
+            else
+                payload = sub(fragment, pos)
+                continue = false
+            end
+
+            frame, err = h2_frame.continuation.new(payload, not continue, sid)
+            if not frame then
+                return nil, err
+            end
+
+            self.session:frame_queue(frame)
+        until not continue
+    end
 
     -- FIXME we change the stream state just when the frame was queued,
     -- maybe it is improper and shoule be postponed

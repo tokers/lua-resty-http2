@@ -725,7 +725,7 @@ end
 
 
 function continuation.pack(cf, dst)
-    header.pack(cf, dst)
+    header.pack(cf.header, dst)
     dst[#dst + 1] = cf.block_frags
 end
 
