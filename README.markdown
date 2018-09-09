@@ -403,7 +403,7 @@ local h2_stream = require "resty.http2.stream"
 
 ### h2_stream.new
 
-**syntax**: `local stream = h2_stream.new(sid, weight, session)`
+**syntax**: *local stream = h2_stream.new(sid, weight, session)*
 
 Creates a new stream with the identifier `sid`, weight `weight` and the HTTP/2 session which it belongs.
 
@@ -411,7 +411,7 @@ Creates a new stream with the identifier `sid`, weight `weight` and the HTTP/2 s
 
 ### h2_stream.new_root
 
-**syntax**: `local root_stream = h2_stream.new_root(session)`
+**syntax**: *local root_stream = h2_stream.new_root(session)*
 
 Creates the root stream with it's session.
 
@@ -421,7 +421,7 @@ The root stream's identifier is `0x0` and is really a virtual stream which is us
 
 ### stream:submit_headers
 
-**syntax**: `local ok, err = stream:submit_headers(headers, end_stream, priority?, pad?)`
+**syntax**: *local ok, err = stream:submit_headers(headers, end_stream, priority?, pad?)*
 
 Submits some HTTP headers to the stream.
 
@@ -443,7 +443,7 @@ In case of failure, `nil` and a Lua string which describes the corresponding err
 
 ### stream:submit_data
 
-**syntax**: `local ok, err = stream:submit_data(data, pad, last)`
+**syntax**: *local ok, err = stream:submit_data(data, pad, last)*
 
 Submits some request body to the stream, `data` should be a Lua string, with optional padding data.
 
