@@ -477,9 +477,9 @@ When `depend` is absent, the target stream will be the root and `excl` will be t
 
 **syntax**: *stream:rst(code)*
 
-Generates a RST frame with the error code `code`. In the case of `code` is absent, the NO_ERROR code will be selected.
+Generates a RST_STREAM frame with the error code `code`. In the case of `code` is absent, the NO_ERROR code will be selected.
 
-Note this method just **generates** a RST frame rather than send it, caller should send this frame by calling [session:flush_queue](#sessionflush_queue).
+Note this method just **generates** a RST_STREAM frame rather than send it, caller should send this frame by calling [session:flush_queue](#sessionflush_queue).
 
 [Back to TOC](#table-of-contents)
 
