@@ -35,6 +35,15 @@ Table of Contents
     * [stream:submit_data](#streamsubmit_data)
     * [stream:submit_window_update](#streamsubmit_window_update)
     * [stream:set_dependency](#streamset_dependency)
+  * [resty.http2.frame](#restyhttp2frame)
+    * [h2_frame.header.new](#h2_frameheadernew)
+    * [h2_frame.header.pack](#h2_frameheaderpack)
+    * [h2_frame.header.unpack](#h2_frameheaderunpack)
+    * [h2_frame.priority.pack](#h2_frameprioritypack)
+    * [h2_frame.priority.unpack](#h2_framepriorityunpack)
+    * [h2_frame.rst_stream.pack](#h2_framerst_streampack)
+    * [h2_frame.rst_stream.unpack](#h2_framerst_streamunpack)
+    * [h2_frame.rst_stream.new](#h2_framerst_streamunnew)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -480,6 +489,121 @@ When `depend` is absent, the target stream will be the root and `excl` will be t
 Generates a RST_STREAM frame with the error code `code`. In the case of `code` is absent, the NO_ERROR code will be selected.
 
 Note this method just **generates** a RST_STREAM frame rather than send it, caller should send this frame by calling [session:flush_queue](#sessionflush_queue).
+
+[Back to TOC](#table-of-contents)
+
+resty.http2.frame
+-----------------
+
+To load this module, just do this:
+
+```lua
+local h2_frame = require "resty.http2.frame"
+```
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.header.new
+
+**syntax**: *local hd = h2_frame.header.new(length, typ, flags, id)*
+
+Creates a frame header, with the payload length `length`, frame type `type` and
+takes `flags` as the frame flags, which belongs to the stream `id`.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.header.pack
+
+**syntax**: *h2_frame.header.pack(hd, dst)*
+
+Serializes the frame header `hd` to the destination `dst`. The `dst` must be a
+array-like Lua table.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.header.unpack
+
+**syntax**: *h2_frame.header.unpack(src)*
+
+Deserializes a frame header from a Lua string `src`, the length of `src` must be at least 9 octets.
+[Back to TOC](#table-of-contents)
+
+### h2_frame.priority.pack
+
+**syntax**: *h2_frame.priority.pack(pf, dst)*
+
+Serializes a PRIORITY frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `pf` must be a hash-like Lua table which contians:
+
+* `header`, the frame header;
+* `depend`, the dependent stream identifier
+* `excl`, specifies whether the current stream where this PRIORITY frame stays becomes the sole child of the stream identified by `depend`;
+* `weight`, assigns a new weight `weight` to current stream;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.priority.unpack
+
+**syntax**: *local ok, err = h2_frame.priority.unpack(pf, src, stream)*
+
+Deserializes a PRIORITY frame from a Lua string `src`, the length of `src` must
+be at least the size specified in the `pf.header.length`.
+
+The `pf` should be a hash-like Lua table which already contains the current
+PRIORITY frame's header, i.e. `pf.header`.
+
+The last parameter `stream` specifies the stream that current PRIORITY frame
+belongs.
+
+Corresponding actions will be taken automatically inside this method like
+building the new dependencies.
+
+In case of failure, `nil` and a Lua string which describes the error reason
+will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.rst_stream.pack
+
+**syntax**: *h2_frame.rst_stream.pack(rf, dst)*
+
+Serializes a RST_STREAM frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `rf` must be a hash-like Lua table which contains:
+
+* `header`, the frame heaader;
+* `error_code`, the error code;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.rst_stream.unpack
+
+**syntax**: *h2_frame.rst_stream.unpack(rf, src, stream)*
+
+Deserializes a RST_STREAM frame from a Lua string `src`, The length of `src`
+msut be at least the size specified in the `pf.header.length`.
+
+The `rf` should be a hash-like Lua table which already contains the current
+RST_STREAM frame's header, i.e. `rf.header`.
+
+The last parameter `stream` specifies the stream that current RST_STREAM frame
+belongs.
+
+Corresponding actions will be taken automatically inside this method like
+changing the stream's state.
+
+In case of failure, `nil` and a Lua string which describes the error reason
+will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.rst_stream.new
+
+**syntax**: *local rf = h2_frame.rst_stream.new(error_code, sid)*
+
+Creates a RST_STREAM frame with the error code `error_code`, which belongs to
+the stream `sid`.
 
 [Back to TOC](#table-of-contents)
 
