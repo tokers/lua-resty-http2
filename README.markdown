@@ -44,6 +44,9 @@ Table of Contents
     * [h2_frame.rst_stream.pack](#h2_framerst_streampack)
     * [h2_frame.rst_stream.unpack](#h2_framerst_streamunpack)
     * [h2_frame.rst_stream.new](#h2_framerst_streamunnew)
+    * [h2_frame.settings.pack](#h2_framesettingspack)
+    * [h2_frame.settings.unpack](#h2_framesettingsunpack)
+    * [h2_frame.settings.new](#h2_framesettingsnew)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -582,7 +585,7 @@ The `rf` must be a hash-like Lua table which contains:
 **syntax**: *h2_frame.rst_stream.unpack(rf, src, stream)*
 
 Deserializes a RST_STREAM frame from a Lua string `src`, The length of `src`
-msut be at least the size specified in the `pf.header.length`.
+msut be at least the size specified in the `rf.header.length`.
 
 The `rf` should be a hash-like Lua table which already contains the current
 RST_STREAM frame's header, i.e. `rf.header`.
@@ -604,6 +607,57 @@ will be given.
 
 Creates a RST_STREAM frame with the error code `error_code`, which belongs to
 the stream `sid`.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.settings.pack
+
+**syntax**: *h2_frame.settings.pack(sf, dst)*
+
+Serializes a SETTINGS frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `sf` must be a hash-like Lua table which contains:
+
+* `header`, the frame heaader;
+* `item`, the specific settings, which should be a array-like Lua table, each element should be a hash-like Lua table:
+  * `id`, the setting identifier, can be:
+    * SETTINGS_ENABLE_PUSH (0x2)
+    * SETTINGS_MAX_CONCURRENT_STREAMS (0x3)
+    * SETTINGS_INITIAL_WINDOW_SIZE (0x4)
+    * SETTINGS_MAX_FRAME_SIZE (0x5)
+  * `value`, the corresponding setting value;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.settings.unpack
+
+**syntax**: *local ok, err = h2_frame.settings.unpack(sf, src, stream)*
+
+Deserializes a SETTINGS frame from a Lua string `src`, The length of `src` msut be at least the size specified in the `sf.header.length`.
+
+The `sf` should be a hash-like Lua table which already contains the current SETTINGS frame's header, i.e. `sf.header`.
+
+The last parameter `stream` specifies the stream that current SETTINGS frame belongs (must be the root stream).
+
+Corresponding actions will be taken automatically inside this method like updating the HTTP/2 session settings value.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.settings.new
+
+**syntax**: *local sf = h2_frame.settings.new(flags, payload)*
+
+Creates a SETTINGS frame with the flags `flags` and payload item `payload`.
+
+The `payload` should be a array-like Lua table, each element should be a hash-like Lua table:
+  * `id`, the setting identifier, can be:
+    * SETTINGS_ENABLE_PUSH (0x2)
+    * SETTINGS_MAX_CONCURRENT_STREAMS (0x3)
+    * SETTINGS_INITIAL_WINDOW_SIZE (0x4)
+    * SETTINGS_MAX_FRAME_SIZE (0x5)
+  * `value`, the corresponding setting value;
 
 [Back to TOC](#table-of-contents)
 
