@@ -70,6 +70,13 @@ Table of Contents
     * [hpack.indexed](#hpackindexed)
     * [hpack.incr_indexed](#hpackincr_indexed)
     * [hpack.new](#hpacknew)
+    * [h:insert_entry](#hinsert_entry)
+    * [h:resize](#hresize)
+    * [h:decode](#hdecode)
+    * [h:get_indexed_header](#hget_indexed_header)
+  * [resty.http2.error](#restyhttp2error)
+    * [h2_error.strerror](#h2_errorstrerror)
+    * [h2_error.is_stream_error](#h2_erroris_stream_error)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -591,8 +598,7 @@ belongs.
 Corresponding actions will be taken automatically inside this method like
 building the new dependencies.
 
-In case of failure, `nil` and a Lua string which describes the error reason
-will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -625,8 +631,7 @@ belongs.
 Corresponding actions will be taken automatically inside this method like
 changing the stream's state.
 
-In case of failure, `nil` and a Lua string which describes the error reason
-will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -670,7 +675,7 @@ The last parameter `stream` specifies the stream that current SETTINGS frame bel
 
 Corresponding actions will be taken automatically inside this method like updating the HTTP/2 session settings value.
 
-In case of failure, `nil` and a Lua string which describes the error reason will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -714,7 +719,7 @@ The `pf` should be a hash-like Lua table which already contains the current PING
 
 The last parameter `stream` specifies the stream that current PING frame belongs (must be the root stream).
 
-In case of failure, `nil` and a Lua string which describes the error reason will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -778,7 +783,7 @@ The `wf` should be a hash-like Lua table which already contains the current WIND
 
 The last parameter `stream` specifies the stream that current WINDOW_UPDATE frame belongs.
 
-In case of failure, `nil` and a Lua string which describes the error reason will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -819,7 +824,7 @@ The last parameter `stream` specifies the stream that current HEADER frame belon
 
 The corresponding action will be taken, for example, stream state transition will happens.
 
-In case of failure, `nil` and a Lua string which describes the error reason will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -869,7 +874,7 @@ The last parameter `stream` specifies the stream that current CONTINUATION frame
 
 The corresponding action will be taken, for example, stream state transition will happens.
 
-In case of failure, `nil` and a Lua string which describes the error reason will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -912,7 +917,7 @@ The last parameter `stream` specifies the stream that current DATA frame belongs
 
 The corresponding action will be taken, for example, stream state transition will happens.
 
-In case of failure, `nil` and a Lua string which describes the error reason will be given.
+In case of failure, `nil` and an error code will be given.
 
 [Back to TOC](#table-of-contents)
 
@@ -986,6 +991,115 @@ Returns the index after using Literal Header Field With Incremental Indexing.
 Creates a hpack instance, since the HPACK decoding is stateful.
 
 The `size` represents the maximum hpack table size, default is 4096 bytes.
+
+The return value `h`, represents the HPACK instance. One of h's member is important, i.e. `h.cached`, which saves the whole header block fragments, and [h:decode](#hdecode) will analysis the data inside the `h.cached`.
+
+Currently the [h2_frame.headers.unpack](#h2_frameheadersunpack) and
+[h2_frame.continuation.unpack](#h2_framecontinuationunpack) will push header block fragments to `h.cached`, once the block is complete, the decoding will be executed.
+
+[Back to TOC](#table-of-contents)
+
+### h:insert_entry
+
+**syntax**: *local ok = h:insert_entry(header_name, header_value)*
+
+Tries to insert a header entry with name `header_name` and value `header_value` to the HPACK dynamic table.
+
+The insertion maybe failed if this entry is too large. Necessary entry eviction will happen if the space is not enough.
+
+This method will return `true` if the insertion is successful or `false` if not.
+
+[Back to TOC](#table-of-contents)
+
+### h:resize
+
+**syntax**: *local ok = h:resize(new_size)*
+
+Adjusts the dynamic table size to `new_size`, currently the `new_size` cannot exceed `4096`, other the resize operation will be failed.
+
+When the dynamic table size is shrink, some entries will be evicted according the HPACK's rule.
+
+This method will return `true` if the resize operation is successful or `false` if not.
+
+[Back to TOC](#table-of-contents)
+
+### h:decode
+
+**syntax**: *local ok, err = h:decode(dst)*
+
+Decodes the header block fragments inside `h.cached`, decoded headers will be saved in `dst`, a hash-like Lua table.
+
+In case of failure, `nil` and an error code will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h:get_indexed_header
+
+**syntax**: *local entry = h:get_indexed_header(index)*
+
+Returns the header entry according the index `index`.
+
+The return value will be `nil` if the index is invalid, otherwise, the `entry` will be hash-like Lua table with two items:
+
+* `entry.name`, the header name;
+* `entry.value`, the header value;
+
+[Back to TOC](#table-of-contents)
+
+resty.http2.error
+-----------------
+
+This module implements some low-level error-relevant APIs.
+
+There many defined error codes, basically they are consistent with HTTP/2 protocol:
+
+* `h2_error.NO_ERROR`
+* `h2_error.PROTOCOL`
+* `h2_error.INTERNAL_ERROR`
+* `h2_error.FLOW_CONTROL_ERROR`
+* `h2_error.SETTINGS_TIMEOUT`
+* `h2_error.STREAM_CLOSED`
+* `h2_error.FRAME_SIZE_ERROR`
+* `h2_error.REFUSED_STREAM`
+* `h2_error.CANCEL`
+* `h2_error.COMPRESSION_ERROR`
+* `h2_error.CONNECT_ERROR`
+* `h2_error.ENHANCE_YOUR_CALM`
+* `h2_error.INADEQUATE_SECURITY`
+* `h2_error.HTTP_1_1_REQUIRED`
+
+And three custom error codes:
+
+* `h2_error.STREAM_PROTOCOL_ERROR`, stream level protocol error;
+* `h2_error.STREAM_FLOW_CONTROL_ERROR`, stream level flow control error;
+* `h2_error.STREAM_FRAME_SIZE_ERROR`, stream level frame size error;
+
+Stream level errors will not influence the whole connection but reset the current stream.
+
+To load this module, just do this:
+
+[Back to TOC](#table-of-contents)
+
+### h2_error.strerror
+
+**syntax**: *local msg = h2_error.strerror(code)*
+
+Returns a Lua string which describe the error code `code`, `"unknown error"` will be given if the error code is unknown.
+
+[Back to TOC](#table-of-contents)
+
+### h2_error.is_stream_error
+
+**syntax**: *local ok = h2_error.is_stream_error(code)*
+
+Judges whether the error code `code` is a stream-level error.
+
+[Back to TOC](#table-of-contents)
+
+
+```lua
+local h2_error = require "resty.http2.error"
+```
 
 [Back to TOC](#table-of-contents)
 
