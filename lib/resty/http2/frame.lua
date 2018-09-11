@@ -366,6 +366,8 @@ function ping.unpack(pf, src, stream)
 
     pf.opaque_data_hi = unpack_u32(byte(src, 1, 4))
     pf.opaque_data_lo = unpack_u32(byte(src, 5, 8))
+
+    return true
 end
 
 

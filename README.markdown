@@ -47,6 +47,17 @@ Table of Contents
     * [h2_frame.settings.pack](#h2_framesettingspack)
     * [h2_frame.settings.unpack](#h2_framesettingsunpack)
     * [h2_frame.settings.new](#h2_framesettingsnew)
+    * [h2_frame.ping.pack](#h2_framepingpack)
+    * [h2_frame.ping.unpack](#h2_framepingunpack)
+    * [h2_frame.goaway.pack](#h2_framegoawaypack)
+    * [h2_frame.goaway.unpack](#h2_framegoawayunpack)
+    * [h2_frame.goaway.new](#h2_framegoawaynew)
+    * [h2_frame.window_update.pack](#h2_framewindow_updatepack)
+    * [h2_frame.window_update.unpack](#h2_framewindow_updateunpack)
+    * [h2_frame.window_update.new](#h2_framewindow_updatenew)
+    * [h2_frame.headers.pack](#h2_frameheaderspack)
+    * [h2_frame.headers.unpack](#h2_frameheadersunpack)
+    * [h2_frame.headers.new](#h2_frameheadersnew)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -575,7 +586,7 @@ Serializes a RST_STREAM frame to the destination `dst`. The `dst` must be a arra
 
 The `rf` must be a hash-like Lua table which contains:
 
-* `header`, the frame heaader;
+* `header`, the frame header;
 * `error_code`, the error code;
 
 [Back to TOC](#table-of-contents)
@@ -584,8 +595,8 @@ The `rf` must be a hash-like Lua table which contains:
 
 **syntax**: *h2_frame.rst_stream.unpack(rf, src, stream)*
 
-Deserializes a RST_STREAM frame from a Lua string `src`, The length of `src`
-msut be at least the size specified in the `rf.header.length`.
+Deserializes a RST_STREAM frame from a Lua string `src`. The length of `src`
+must be at least the size specified in the `rf.header.length`.
 
 The `rf` should be a hash-like Lua table which already contains the current
 RST_STREAM frame's header, i.e. `rf.header`.
@@ -618,7 +629,7 @@ Serializes a SETTINGS frame to the destination `dst`. The `dst` must be a array-
 
 The `sf` must be a hash-like Lua table which contains:
 
-* `header`, the frame heaader;
+* `header`, the frame header;
 * `item`, the specific settings, which should be a array-like Lua table, each element should be a hash-like Lua table:
   * `id`, the setting identifier, can be:
     * SETTINGS_ENABLE_PUSH (0x2)
@@ -633,7 +644,7 @@ The `sf` must be a hash-like Lua table which contains:
 
 **syntax**: *local ok, err = h2_frame.settings.unpack(sf, src, stream)*
 
-Deserializes a SETTINGS frame from a Lua string `src`, The length of `src` msut be at least the size specified in the `sf.header.length`.
+Deserializes a SETTINGS frame from a Lua string `src`. The length of `src` must be at least the size specified in the `sf.header.length`.
 
 The `sf` should be a hash-like Lua table which already contains the current SETTINGS frame's header, i.e. `sf.header`.
 
@@ -658,6 +669,160 @@ The `payload` should be a array-like Lua table, each element should be a hash-li
     * SETTINGS_INITIAL_WINDOW_SIZE (0x4)
     * SETTINGS_MAX_FRAME_SIZE (0x5)
   * `value`, the corresponding setting value;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.ping.pack
+
+**syntax**: *h2_frame.ping.pack(pf, dst)*
+
+Serializes a PING frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `pf` must be a hash-like Lua table which contains:
+
+* `header`, the frame header;
+* `opaque_data_hi`, highest 32 bits value of the corresponding ping data;
+* `opaque_data_lo`, lowest 32 bits value of the corresponding ping data;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.ping.unpack
+
+**syntax**: *local ok, err = h2_frame.ping.unpack(pf, src, stream)*
+
+Deserializes a PING frame from a Lua string `src`. The length of `src` must be at least the size specified in the `sf.header.length`.
+
+The `pf` should be a hash-like Lua table which already contains the current PING frame's header, i.e. `pf.header`.
+
+The last parameter `stream` specifies the stream that current PING frame belongs (must be the root stream).
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.goaway.pack
+
+**syntax**: *h2_frame.goaway.pack(gf, dst)*
+
+Serializes a GOAWAY frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `gf` must be hash-like Lua table which contains:
+
+* `header`, the frame header;
+* `last_stream_id`, the last peer-initialized stream identifier;
+* `error_code`, the error code;
+* `debug_data`, the debug data;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.goaway.unpack
+
+**syntax**: *local ok, err = h2_frame.goaway.unpack(gf, src, stream)*
+
+Deserializes a GOAWAY frame from a Lua string `src`. The length of `src` must be at least the size specified in the `gf.header.length`.
+
+The `gf` should be a hash-like Lua table which already contains the current GOAWAY frame's heaer, i.e. `gf.header`.
+
+The last parameter `stream` specifies the stream that current GOAWAY frame belongs (must be the root stream).
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.goaway.new
+
+**syntax**: *local gf = h2_frame.goaway.new(last_sid, error_code, debug_data)*
+
+Creates a GOAWAY frame with the last peer-initialized stream identifier `last_sid`, and error code `error_code`. Optionally, with the debug data `debug_data`.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.window_update.pack
+
+**syntax**: *h2_frame.window_update.pack(wf, dst)*
+
+Serializes a WINDOW_UPDATE frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `wf` must be hash-like Lua table which contains:
+
+* `header`, the frame header;
+* `window_size_increment`, the window size increment;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.window_update.unpack
+
+**syntax**: *local ok, err = h2_frame.window_update.unpack(wf, src, stream)*
+
+Deserializes a WINDOW_UPDATE frame from a Lua string `src`. The length of `src` must be at least the size specified in the `wf.header.length`.
+
+The `wf` should be a hash-like Lua table which already contains the current WINDOW_UPDATE frame's heaer, i.e. `wf.header`.
+
+The last parameter `stream` specifies the stream that current WINDOW_UPDATE frame belongs.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.window_update.new
+
+**syntax**: *local wf = h2_frame.window_update.new(sid, window)*
+
+Creates a WINDOW_UPDATE frame with the stream identifier `sid`, and enlarges the window size specified by `window`.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.headers.pack
+
+**syntax**: *h2_frame.headers.pack(hf, dst)*
+
+Serializes a HEADERS frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `hf` must be hash-like Lua table which contains:
+
+* `header`, the frame header;
+* `pad`, the padding data;
+* `depend`, the dependent stream identifier;
+* `excl`, specifies whether the stream that current HEADERS frame belongs will become the sole child of the stream `depend`;
+* `weight`, specifies the weight of the stream that current HEADERS frame belongs.
+* `block_frags`, the plain HTTP headers (after the hpack compressing);
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.headers.unpack
+
+**syntax**: *local ok,err = h2_frame.headers.unpack(hf, src, stream)*
+
+Deserializes a HEADERS frame from the Lua string `src`, the length of `src` must be at least the size specified in the `hf.header.length`
+
+The `hf` should be a hash-like Lua table which already contains the current HEADERS frame's heaer, i.e. `hf.header`.
+
+The last parameter `stream` specifies the stream that current WINDOW_UPDATE frame belongs.
+
+The corresponding action will be taken, for example, stream state transition will happens.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.headers.new
+
+**syntax**: *local hf = h2_frame.headers.new(frags, pri?, pad?, end_stream, end_headers, sid)*
+
+Creates a HEADERS frame which takes the block fragments `frags`.
+
+The parameter `pri` can be taken to specify the stream dependencies, `pri` should be a hash-like Lua table, which contains:
+
+* `sid`, the dependent stream identifier;
+* `excl`, whether the stream `sid` will be the sole child of dependent stream;
+* `weight`, defines the current stream's (specified by `sid`) weight
+;
+
+The `pad` specifies the padding data, which is optional.
+
+When `end_stream` is true, current HEADERS frame will takes the END_STREAM flag, likewise, when `end_headers` is true, current HEADERS frame will takes the END_HEADERS flag.
+
+One shuld take care that if current HEADERS frame doesn't contain the whole headers, then one or more CONTINUATION frames must be followed according to the HTTP/2 procotol.
 
 [Back to TOC](#table-of-contents)
 
