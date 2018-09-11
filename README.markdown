@@ -1097,12 +1097,6 @@ Judges whether the error code `code` is a stream-level error.
 [Back to TOC](#table-of-contents)
 
 
-```lua
-local h2_error = require "resty.http2.error"
-```
-
-[Back to TOC](#table-of-contents)
-
 Author
 ======
 
