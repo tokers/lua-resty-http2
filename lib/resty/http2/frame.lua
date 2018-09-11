@@ -918,7 +918,7 @@ end
 function push_promise.unpack()
     debug_log("server sent PUSH_PROMISE frame with ",
               "ignoring SETTINGS_ENABLE_PUSH setting")
-    return h2_error.PROTOCOL_ERROR
+    return nil, h2_error.PROTOCOL_ERROR
 end
 
 

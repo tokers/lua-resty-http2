@@ -58,6 +58,13 @@ Table of Contents
     * [h2_frame.headers.pack](#h2_frameheaderspack)
     * [h2_frame.headers.unpack](#h2_frameheadersunpack)
     * [h2_frame.headers.new](#h2_frameheadersnew)
+    * [h2_frame.continuation.pack](#h2_framecontinuationpack)
+    * [h2_frame.continuation.unpack](#h2_framecontinuationunpack)
+    * [h2_frame.continuation.new](#h2_framecontinuationnew)
+    * [h2_frame.data.pack](#h2_framedatapack)
+    * [h2_frame.data.unpack](#h2_framedataunpack)
+    * [h2_frame.data.new](#h2_framedatannew)
+    * [h2_frame.push_promise.unpack](#h2_framepush_promiseunpack)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -797,7 +804,7 @@ Deserializes a HEADERS frame from the Lua string `src`, the length of `src` must
 
 The `hf` should be a hash-like Lua table which already contains the current HEADERS frame's heaer, i.e. `hf.header`.
 
-The last parameter `stream` specifies the stream that current WINDOW_UPDATE frame belongs.
+The last parameter `stream` specifies the stream that current HEADER frame belongs.
 
 The corresponding action will be taken, for example, stream state transition will happens.
 
@@ -822,7 +829,103 @@ The `pad` specifies the padding data, which is optional.
 
 When `end_stream` is true, current HEADERS frame will takes the END_STREAM flag, likewise, when `end_headers` is true, current HEADERS frame will takes the END_HEADERS flag.
 
-One shuld take care that if current HEADERS frame doesn't contain the whole headers, then one or more CONTINUATION frames must be followed according to the HTTP/2 procotol.
+One should take care that if current HEADERS frame doesn't contain the whole headers, then one or more CONTINUATION frames must be followed according to the HTTP/2 procotol.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.continuation.pack
+
+**syntax**: *h2_frame.continuation.pack(cf, dst)*
+
+Serializes a CONTINUATION frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `cf` must be hash-like Lua table which contains:
+
+* `header`, the frame header;
+* `block_frags`, the plain HTTP headers (after the hpack compressing);
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.continuation.unpack
+
+**syntax**: *local ok, err = h2_frame.continuation.unpack(cf, src, stream)*
+
+Deserializes a CONTINUATION frame from the Lua string `src`, the length of `src` must be at least the size specified in the `cf.header.length`
+
+The `cf` should be a hash-like Lua table which already contains the current CONTINUATION frame's heaer, i.e. `cf.header`.
+
+The last parameter `stream` specifies the stream that current CONTINUATION frame belongs.
+
+The corresponding action will be taken, for example, stream state transition will happens.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.continuation.new
+
+**syntax**: *local cf = h2_frame.continuation.new(frags, end_headers, sid)*
+
+Creates a CONTINUATION frame which takes the block fragments `frags`.
+
+When `end_headers` is true, current CONTINUATION frame will takes the END_HEADERS flag.
+
+One should take care that if current CONTINUATION frame doesn't contain the whole headers, then one or more CONTINUATION frames must be followed according to the HTTP/2 procotol.
+
+The `sid` specifies the stream that current CONTINUATION frame belongs.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.data.pack
+
+**syntax**: *h2_frame.data.pack(df, dst)*
+
+Serializes a DATA frame to the destination `dst`. The `dst` must be a array-like Lua table.
+
+The `df` must be hash-like Lua table which contains:
+
+* `header`, the frame header;
+* `payload`, the HTTP request/response body;
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.data.unpack
+
+**syntax**: *local ok, err = h2_frame.data.unpack(df, src, stream)*
+
+Deserializes a DATA frame from the Lua string `src`, the length of `src` must be at least the size specified in the `df.header.length`
+
+The `df` should be a hash-like Lua table which already contains the current DATA frame's heaer, i.e. `df.header`.
+
+The last parameter `stream` specifies the stream that current DATA frame belongs.
+
+The corresponding action will be taken, for example, stream state transition will happens.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.data.new
+
+**syntax**: *local df = h2_frame.data.new(payload, pad, last, sid)*
+
+Creates a DATA frame which takes the payload `payload`.
+
+The `pad` specifies the padding data, which is optional.
+
+When `last` is true, current DATA frame will takes the END_STREAM flag.
+
+The `sid` specifies the stream that current DATA frame belongs.
+
+[Back to TOC](#table-of-contents)
+
+### h2_frame.push_promise.unpack
+
+**syntax**: *local df = h2_frame.data.new(payload, pad, last, sid)*
+
+Currently any incoming PUSH_PROMISE frame will be rejected.
+
+This method always returns `nil` and the error PROTOCOL_ERROR.
 
 [Back to TOC](#table-of-contents)
 
