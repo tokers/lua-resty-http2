@@ -65,6 +65,11 @@ Table of Contents
     * [h2_frame.data.unpack](#h2_framedataunpack)
     * [h2_frame.data.new](#h2_framedatannew)
     * [h2_frame.push_promise.unpack](#h2_framepush_promiseunpack)
+  * [resty.http2.hpack](#restyhttp2hpack)
+    * [hpack.encode](#hpackencode)
+    * [hpack.indexed](#hpackindexed)
+    * [hpack.incr_indexed](#hpackincr_indexed)
+    * [hpack.new](#hpacknew)
 * [Author](#author)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
@@ -302,6 +307,8 @@ client:keepalive("test")
 resty.http2.protocol
 -------------------
 
+This module implements some low-level protocool-relevant APIs.
+
 To load this module, just do this:
 
 ```lua
@@ -423,6 +430,8 @@ The meanings of `recv`, `send` and `ctx` are same as these described in [http.ne
 resty.http2.stream
 ------------------
 
+This module implements some low-level stream-relevant APIs.
+
 To load this module, just do this:
 
 ```lua
@@ -515,6 +524,8 @@ Note this method just **generates** a RST_STREAM frame rather than send it, call
 
 resty.http2.frame
 -----------------
+
+This module implements some low-level frame-relevant APIs.
 
 To load this module, just do this:
 
@@ -926,6 +937,55 @@ The `sid` specifies the stream that current DATA frame belongs.
 Currently any incoming PUSH_PROMISE frame will be rejected.
 
 This method always returns `nil` and the error PROTOCOL_ERROR.
+
+[Back to TOC](#table-of-contents)
+
+resty.http2.hpack
+------------------
+
+This module implements some low-level HPACK APIs.
+
+To load this module, just do this:
+
+```lua
+local hpack = require "resty.http2.hpack"
+```
+
+[Back to TOC](#table-of-contents)
+
+### hpack.encode
+
+**syntax**: *hpack.encode(src, dst, lower)*
+
+Encodes the Lua string `src` to destination `dst`, the `dst` must be a array-like Lua table. Huffman codes will be tried firstly.
+
+The `lower` specifies whether current encoding operation is case-insensitive, default is `false`.
+
+[Back to TOC](#table-of-contents)
+
+### hpack.indexed
+
+**syntax**: *local v = hpack.indexed(index)*
+
+Returns the index after using Indexed Header Field Representation.
+
+[Back to TOC](#table-of-contents)
+
+### hpack.incr_indexed
+
+**syntax**: *local v = hpack.indexed(index)*
+
+Returns the index after using Literal Header Field With Incremental Indexing.
+
+[Back to TOC](#table-of-contents)
+
+### hpack.new
+
+**syntax**: *local h = hpack.new(size)*
+
+Creates a hpack instance, since the HPACK decoding is stateful.
+
+The `size` represents the maximum hpack table size, default is 4096 bytes.
 
 [Back to TOC](#table-of-contents)
 
