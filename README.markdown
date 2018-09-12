@@ -203,9 +203,9 @@ and a error message string will be returned.
 
 The sole parameter `opts`, which is a Lua table, contains some fields:
 
-* `recv`, a Lua function which used to read bytes;
+* `recv`, a Lua function which is used to read bytes;
 
-* `send`, a Lua function which used to send bytes;
+* `send`, a Lua function which is used to send bytes;
 
 * `ctx`, an opaque data, acts as the callers' context;
 
@@ -377,7 +377,7 @@ Meaning of each parameter:
 * `no_body`, a boolean value, indicates whether this request has body. When it
 is true, the generated HEADERS frame will contains the END_HEADERS flag;
 
-* `priority`, a hash-like Lua table, which used to define a custom stream dependencies:
+* `priority`, a hash-like Lua table, which is used to define a custom stream dependencies:
   * `priority.sid` represents the dependent stream identifier;
   * `priority.excl`, whether the new stream becomes the sole dependency of the
   stream indicated by `priority.sid`;
@@ -475,7 +475,7 @@ The first parameter `headers`, should be a hash-like Lua table represent the HTT
 
 The `end_stream` parameter should be a boolean value and is used to control whether the HEADERS frame should take the END_STREAM flag, basically callers can set it true if there is no request body need to send.
 
-`priority` should be a hash-like Lua table (if any), which used to define a custom stream dependencies:
+`priority` should be a hash-like Lua table (if any), which is used to define a custom stream dependencies:
   * `priority.sid` represents the dependent stream identifier;
   * `priority.excl`, whether the new stream becomes the sole dependency of the
   stream indicated by `priority.sid`;
