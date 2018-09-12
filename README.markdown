@@ -168,7 +168,7 @@ HTTP/2 session with sending the connection preface, i.e. the string:
 PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n
 ```
 
-Perhaps this awkward situation can be solved in the future if the ALPN or NPN extensions are supported.
+This library provides a patch for the Application-Layer Protocol Negotiation. just uses [this](util/lua-nginx-module-0.10.13-ssl-alpn.patch) if you need.
 
 **Only a HTTP request can be submitted**. Currently the implemented APIs support for submitting just one HTTP request. PRs are welcome to solve this.
 

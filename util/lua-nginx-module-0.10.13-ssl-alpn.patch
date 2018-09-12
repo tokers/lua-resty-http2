@@ -1,0 +1,93 @@
+diff --git a/src/ngx_http_lua_socket_tcp.c b/src/ngx_http_lua_socket_tcp.c
+index 0717c46d..fc8317e4 100644
+--- a/src/ngx_http_lua_socket_tcp.c
++++ b/src/ngx_http_lua_socket_tcp.c
+@@ -1276,8 +1276,8 @@ ngx_http_lua_socket_tcp_sslhandshake(lua_State *L)
+        [,send_status_req] */
+ 
+     n = lua_gettop(L);
+-    if (n < 1 || n > 5) {
+-        return luaL_error(L, "ngx.socket sslhandshake: expecting 1 ~ 5 "
++    if (n < 1 || n > 6) {
++        return luaL_error(L, "ngx.socket sslhandshake: expecting 1 ~ 6 "
+                           "arguments (including the object), but seen %d", n);
+     }
+ 
+@@ -1421,6 +1421,45 @@ ngx_http_lua_socket_tcp_sslhandshake(lua_State *L)
+                         return luaL_error(L, "no OCSP support");
+ #endif
+                     }
++
++                    if (n >= 6) {
++#if (defined TLSEXT_TYPE_application_layer_protocol_negotiation)
++                        size_t          len;
++                        ngx_uint_t      i;
++                        const char     *data;
++                        unsigned char  *list;
++
++                        data = lua_tolstring(L, 6, &len);
++                        if (len > 255) {
++                            lua_pushnil(L);
++                            lua_pushliteral(L, "too large next protocol list");
++                            return 2;
++                        }
++
++                        list = ngx_palloc(r->pool, len + 1);
++                        if (list == NULL) {
++                            lua_pushnil(L);
++                            lua_pushliteral(L, "no memory");
++                            return 2;
++                        }
++
++                        list[0] = (char) len;
++                        ngx_memcpy(list + 1, data, len);
++
++                        if (SSL_set_alpn_protos(c->ssl->connection,
++                                                (const unsigned char *) list,
++                                                (unsigned int) (len + 1)))
++                        {
++                            lua_pushnil(L);
++                            lua_pushliteral(L, "SSL_set_alpn_protos failed");
++                            return 2;
++                        }
++
++                        u->ssl_ext_upgrade = 1;
++#else
++                        return luaL_error(L, "no ALPN or NPN support");
++#endif
++                    }
+                 }
+             }
+         }
+@@ -1649,6 +1688,19 @@ ngx_http_lua_ssl_handshake_retval_handler(ngx_http_request_t *r,
+         lua_pushlightuserdata(L, &ngx_http_lua_ssl_session_metatable_key);
+         lua_rawget(L, LUA_REGISTRYINDEX);
+         lua_setmetatable(L, -2);
++
++        if (u->ssl_ext_upgrade) {
++#if (defined TLSEXT_TYPE_application_layer_protocol_negotiation)
++            unsigned int          len;
++            const unsigned char  *data;
++
++            SSL_get0_alpn_selected(c->ssl->connection, &data, &len);
++
++            lua_pushlstring(L, data, len);
++
++            return 2;
++#endif
++        }
+     }
+ 
+     return 1;
+diff --git a/src/ngx_http_lua_socket_tcp.h b/src/ngx_http_lua_socket_tcp.h
+index dbdee41c..eb6fc434 100644
+--- a/src/ngx_http_lua_socket_tcp.h
++++ b/src/ngx_http_lua_socket_tcp.h
+@@ -107,6 +107,7 @@ struct ngx_http_lua_socket_tcp_upstream_s {
+ #if (NGX_HTTP_SSL)
+     unsigned                         ssl_verify:1;
+     unsigned                         ssl_session_reuse:1;
++    unsigned                         ssl_ext_upgrade:1;
+ #endif
+ };
+ 
