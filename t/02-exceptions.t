@@ -49,7 +49,6 @@ __DATA__
 
             local data = table.concat(t)
 
-            local prepare_request = function() return headers, data end
             local on_headers_reach = function(ctx, headers)
             end
 
@@ -67,10 +66,7 @@ __DATA__
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
                 preread_size = 1024,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -78,7 +74,8 @@ __DATA__
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, data, on_headers_reach,
+                                           on_data_reach)
             assert(ok == nil)
             ngx.print(err)
 
@@ -128,10 +125,6 @@ client sent invalid method: "get"
                 { name = "cookie", value = cookie },
             }
 
-            local prepare_request = function()
-                return headers
-            end
-
             local on_headers_reach = function(ctx, headers)
                 error("unexpected HEADERS frame")
             end
@@ -151,9 +144,6 @@ client sent invalid method: "get"
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -161,7 +151,8 @@ client sent invalid method: "get"
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
             assert(ok == nil)
             assert(err == "connection went away")
             ngx.print("OK")

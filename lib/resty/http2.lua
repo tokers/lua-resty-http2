@@ -8,6 +8,7 @@ local util = require "resty.http2.util"
 local is_func = util.is_func
 local debug_log = util.debug_log
 local new_tab = util.new_tab
+local new_buffer = util.new_buffer
 local sub = string.sub
 local min = math.min
 local setmetatable = setmetatable
@@ -70,7 +71,7 @@ local function send_data(stream, session, part, last)
 end
 
 
-local function handle_frame(self, session)
+local function handle_frame(self, session, stream)
     local frame, err = session:recv_frame()
     if not frame then
         debug_log("failed to receive a frame: ", err)
@@ -106,18 +107,24 @@ local function handle_frame(self, session)
     end
 
     local end_stream = frame.header.flag_end_stream
-    local abort = false
+    if end_stream and frame.header.id == stream.sid then
+        stream.done = true
+    end
 
     local headers = typ == h2_frame.HEADERS_FRAME or h2_frame.CONTINUATION_FRAME
     if headers and frame.header.flag_end_headers then
-        if self.on_headers_reach(session.ctx, frame.block_frags) then
-            abort = true
-        end
+        self.cached_headers = frame.block_frags
+        return true
     end
 
     if typ == h2_frame.DATA_FRAME then
-        if self.on_data_reach(session.ctx, frame.payload) then
-            abort = true
+        local buf = new_buffer(frame.payload)
+        if not self.cached_body then
+            self.last_body = buf
+            self.cached_body = self.last_body
+        else
+            self.last_body.next = buf
+            self.last_body = buf
         end
 
         if session.output_queue_size > 0 then
@@ -130,18 +137,7 @@ local function handle_frame(self, session)
         end
     end
 
-    if not abort then
-        if end_stream and frame.header.id > 0x0 then
-            session.done = true
-        end
-
-        return true
-    end
-
-    -- caller asks for aborting the connection
-    session:close(h2_error.NO_ERROR)
-
-    return session:flush_queue()
+    return true
 end
 
 
@@ -151,19 +147,8 @@ function _M.new(opts)
     local ctx = opts.ctx
     local preread_size = opts.preread_size
     local max_concurrent_stream = opts.max_concurrent_stream
-    local prepare_request = opts.prepare_request
     local max_frame_size = opts.max_frame_size
-    local on_headers_reach = opts.on_headers_reach
-    local on_data_reach = opts.on_data_reach
     local key = opts.key
-
-    if not is_func(prepare_request) then
-        return nil, "prepare_request must be a Lua function"
-    end
-
-    if not is_func(on_headers_reach) then
-        return nil, "on_headers_reach must be a Lua function"
-    end
 
     if max_frame_size and
        (max_frame_size > h2_frame.MAX_FRAME_SIZE or
@@ -195,9 +180,9 @@ function _M.new(opts)
 
     local client = {
         session = session,
-        prepare_request = prepare_request,
-        on_headers_reach = on_headers_reach,
-        on_data_reach = on_data_reach,
+        cached_headers = nil,
+        cached_body = nil,
+        last_body = nil,
     }
 
     return setmetatable(client, mt)
@@ -216,9 +201,15 @@ function _M:keepalive(key)
 end
 
 
-function _M:process()
+function _M:close(code)
     local session = self.session
+    session:close(code)
+    return session:flush_queue()
+end
 
+
+function _M:acknowledge_settings()
+    local session = self.session
     while not session.ack_peer_settings do
         local ok, err = handle_frame(self, session)
         if not ok then
@@ -226,14 +217,13 @@ function _M:process()
         end
     end
 
-    local prepare_request = self.prepare_request
+    return true
+end
 
-    local headers, data = prepare_request(session.ctx)
-    if not headers then
-        return nil, "empty headers"
-    end
 
-    local stream, err = session:submit_request(headers, data == nil, nil, nil)
+function _M:send_request(headers, body)
+    local session = self.session
+    local stream, err = session:submit_request(headers, body == nil, nil, nil)
     if not stream then
         debug_log("failed to submit_request: ", err)
         return nil, err
@@ -245,64 +235,149 @@ function _M:process()
         return nil, flush_err
     end
 
+    if not body then
+        return stream
+    end
+
+    local get_data = get_data_wrapper(body)
+
+    while true do
+        local size = min(session.send_window, stream.send_window)
+        if size > session.max_frame_size then
+            size = session.max_frame_size
+        end
+
+        if size > 0 then
+            local part, last
+            part, last, err = get_data(size)
+            if not part then
+                debug_log("connection will be closed since ",
+                          "DATA frame cannot be generated correctly")
+
+                session:close(h2_error.INTERNAL_ERROR)
+                ok, flush_err = session:flush_queue()
+                if not ok then
+                    return nil, flush_err
+                end
+
+                return nil, err
+            end
+
+            ok, err = send_data(stream, session, part, last)
+            if not ok then
+                return nil, err
+            end
+
+            if last then
+                break
+            end
+        else
+            -- cannot continue sending body, waits the WINDOW_UPDATE firstly
+            ok, err = handle_frame(self, session, stream)
+            if not ok then
+                return nil, err
+            end
+        end
+    end
+
+    return stream
+end
+
+
+function _M:read_headers(stream)
+    local session = stream.session
+
+    while not self.cached_headers do
+        local ok, err = handle_frame(self, session, stream)
+        if not ok then
+            return nil, err
+        end
+    end
+
+    local headers = self.cached_headers
+    self.cached_headers = nil
+
+    return headers
+end
+
+
+function _M:read_body(stream)
+    local session = stream.session
+
+    while not self.cached_body do
+        local ok, err = handle_frame(self, session, stream)
+        if not ok then
+            return nil, err
+        end
+    end
+
+    local body = self.cached_body.data
+    self.cached_body = self.cached_body.next
+
+    return body
+end
+
+
+function _M:request(headers, body, on_headers_reach, on_data_reach)
+    local ack, err = self:acknowledge_settings()
+    if not ack then
+        return nil, err
+    end
+
+    if not headers then
+        return nil, "empty headers"
+    end
+
+    if not is_func(on_headers_reach) then
+        return nil, "invalid on_headers_reach callback"
+    end
+
+    if not is_func(on_data_reach) then
+        return nil, "invalid on_data_reach callback"
+    end
+
+    local stream
+    local resp_headers
+    local data
+    local session = self.session
+
+    stream, err = self:send_request(headers, body)
     if not stream then
         return nil, err
     end
 
-    local get_data
-    if data then
-        get_data = get_data_wrapper(data)
+    resp_headers, err = self:read_headers(stream)
+    if not resp_headers then
+        return nil, err
+    end
+
+    local ctx = session.ctx
+
+    if on_headers_reach(ctx, resp_headers) then
+        -- abort the session
+        return self:close(h2_error.INTERNAL_ERROR)
+    end
+
+    if stream.done then
+        return true
     end
 
     while true do
-        if data then
-            local size = min(session.send_window, stream.send_window)
-            if size > session.max_frame_size then
-                size = session.max_frame_size
-            end
-
-            if size > 0 then
-                local part, last
-                part, last, err = get_data(size)
-                if not part then
-                    debug_log("connection will be closed since ",
-                              "DATA frame cannot be generated correctly")
-
-                    session:close(h2_error.INTERNAL_ERROR)
-                    ok, flush_err = session:flush_queue()
-                    if not ok then
-                        return nil, flush_err
-                    end
-
-                    return nil, err
-                end
-
-                ok, err = send_data(stream, session, part, last)
-                if not ok then
-                    return nil, err
-                end
-
-                if last then
-                    data = nil
-                end
-            end
-        end
-
-        ok, err = handle_frame(self, session)
-        if not ok then
+        data, err = self:read_body(stream)
+        if not data then
             return nil, err
         end
 
-        if session.done then
-            break
+        if on_data_reach(ctx, data) then
+            -- abort
+            return self:close(h2_error.INTERNAL_ERROR)
         end
 
-        if session.goaway_sent or session.goaway_received then
+        if stream.done then
             break
         end
     end
 
-    -- connection closed normally
     return true
 end
 

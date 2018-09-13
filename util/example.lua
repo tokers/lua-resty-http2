@@ -25,18 +25,15 @@ if not ok then
     exit(1)
 end
 
-local prepare_request = function()
-    local headers = {
-        { name = ":authority", value = "tokers.com" },
-        { name = ":method", value = "GET" },
-        { name = ":path", value = "/index.html" },
-        { name = ":scheme", value = "http" },
-        { name = "accept-encoding", value = "gzip" },
-        { name = "user-agent", value = "example/client" },
-    }
+local headers = {
+    { name = ":authority", value = "tokers.com" },
+    { name = ":method", value = "GET" },
+    { name = ":path", value = "/index.html" },
+    { name = ":scheme", value = "http" },
+    { name = "accept-encoding", value = "gzip" },
+    { name = "user-agent", value = "example/client" },
+}
 
-    return headers
-end
 
 local on_headers_reach = function(ctx, headers)
     print("received HEADERS frame:")
@@ -56,9 +53,6 @@ local opts = {
     send = sock.send,
     preread_size = 1024,
     max_concurrent_stream = 100,
-    prepare_request = prepare_request,
-    on_headers_reach = on_headers_reach,
-    on_data_reach = on_data_reach,
 }
 
 local client, err = http2.new(opts)
@@ -67,9 +61,10 @@ if not client then
     exit(1)
 end
 
-local ok, err = client:process()
+local ok, err = client:request(headers, nil, on_headers_reach,
+                               on_data_reach)
 if not ok then
-    print("client:process() failed: ", err)
+    print("client:request() failed: ", err)
     exit(1)
 end
 

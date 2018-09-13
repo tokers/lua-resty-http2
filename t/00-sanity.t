@@ -64,7 +64,6 @@ __DATA__
                 { name = "accept-encoding", value = "deflate, gzip" },
             }
 
-            local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
@@ -88,9 +87,6 @@ __DATA__
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -98,7 +94,8 @@ __DATA__
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
@@ -138,7 +135,6 @@ GET /t
                 { name = "accept-encoding", value = "deflate, gzip" },
             }
 
-            local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
@@ -160,9 +156,6 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -170,7 +163,8 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
@@ -211,7 +205,6 @@ GET /t
                 { name = "content-length", value = "11" },
             }
 
-            local prepare_request = function() return headers, "hello, world" end
             local on_headers_reach = function(ctx, headers)
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
@@ -235,9 +228,6 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -245,7 +235,8 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, "hello world",
+                                           on_headers_reach, on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
@@ -284,7 +275,6 @@ GET /t
                 { name = ":scheme", value = "http" },
             }
 
-            local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
@@ -307,9 +297,6 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -317,7 +304,8 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
@@ -358,7 +346,6 @@ GET /t
                 { name = ":scheme", value = "http" },
             }
 
-            local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
@@ -380,9 +367,6 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -390,7 +374,8 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
@@ -429,7 +414,6 @@ GET /t
                 { name = ":scheme", value = "http" },
             }
 
-            local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
                 assert(headers[":status"] == "200")
                 local length = headers["content-length"]
@@ -453,9 +437,6 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -463,7 +444,8 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
@@ -497,9 +479,6 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
                 key = "key",
             }
 
@@ -508,7 +487,7 @@ GET /t
                 return
             end
 
-            ok, err = client:process()
+            ok, err = client:request(headers, nil, on_headers_reach, on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
@@ -549,7 +528,6 @@ GET /t
                 { name = "accept-encoding", value = "deflate, gzip" },
             }
 
-            local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
                 assert(#headers["cookie"] == 20000)
             end
@@ -573,8 +551,6 @@ GET /t
                 send = sock.send,
                 prepare_request = prepare_request,
                 preread_size = 1024,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -582,7 +558,8 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
 
             if not ok then
                 ngx.log(ngx.ERR, err)

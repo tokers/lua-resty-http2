@@ -57,7 +57,6 @@ __DATA__
                 { name = "accept-encoding", value = "deflate, gzip" },
             }
 
-            local prepare_request = function() return headers end
             local on_headers_reach = function(ctx, headers)
                 assert(#headers["cookie"] == 50000)
             end
@@ -79,10 +78,7 @@ __DATA__
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
                 preread_size = 1024,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
                 max_frame_size = 16385,
             }
 
@@ -91,7 +87,8 @@ __DATA__
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
 
             if not ok then
                 ngx.log(ngx.ERR, err)
@@ -142,13 +139,6 @@ GET /t
                 { name = "cookie", value = cookie },
             }
 
-            local prepare_request = function()
-                -- work-around way to force our library
-                -- generates CONTINUATION frame
-                client.session.max_frame_size = 16384
-                return headers
-            end
-
             local on_headers_reach = function(ctx, headers)
                 assert(headers["cookie"] == cookie)
             end
@@ -170,10 +160,7 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
                 preread_size = 1024,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -181,7 +168,10 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            client.session.max_frame_size = 16384
+
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
 
             if not ok then
                 ngx.log(ngx.ERR, err)
@@ -216,14 +206,12 @@ GET /t
             local http2 = require "resty.http2"
             local h2_frame = require "resty.http2.frame"
 
-            local prepare_request = function()
-                return {
+            local headers = {
                     { name = ":authority", value = "test.com" },
                     { name = ":method", value = "GET" },
                     { name = ":path", value = "/t2" },
                     { name = ":scheme", value = "http" },
                 }
-            end
 
             local on_headers_reach = function()
             end
@@ -245,10 +233,7 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
                 preread_size = 1024,
-                on_headers_reach = on_headers_reach,
-                on_data_reach = on_data_reach,
             }
 
             if not client then
@@ -256,7 +241,8 @@ GET /t
                 return
             end
 
-            local ok, err = client:process()
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach)
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return

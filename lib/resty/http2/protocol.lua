@@ -363,7 +363,6 @@ function _M:detach()
     self.send = nil
     self.ctx = nil
     self.current_sid = nil
-    self.done = false
 end
 
 

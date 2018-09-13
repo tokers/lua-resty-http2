@@ -433,6 +433,7 @@ function _M.new(sid, weight, session)
             send_window = init_window,
             recv_window = session.preread_size,
             exhausted = false,
+            done = false,
         }
 
         session.total_streams = session.total_streams + 1
