@@ -106,20 +106,14 @@ if not ok then
     return
 end
 
--- Prepare request headers and body
--- body can be a Lua string or a Lua function
-local prepare_request = function()
-    local headers = {
-        { name = ":authority", value = "test.com" },
-        { name = ":method", value = "GET" },
-        { name = ":path", value = "/index.html" },
-        { name = ":scheme", value = "http" },
-        { name = "accept-encoding", value = "gzip" },
-        { name = "user-agent", value = "example/client" },
-    }
-
-    return headers
-end
+local headers = {
+    { name = ":authority", value = "test.com" },
+    { name = ":method", value = "GET" },
+    { name = ":path", value = "/index.html" },
+    { name = ":scheme", value = "http" },
+    { name = "accept-encoding", value = "gzip" },
+    { name = "user-agent", value = "example/client" },
+}
 
 local on_headers_reach = function(ctx, headers)
     -- Process the response headers
@@ -133,9 +127,6 @@ local opts = {
     ctx = sock,
     recv = sock.receive,
     send = sock.send,
-    prepare_request = prepare_request,
-    on_headers_reach = on_headers_reach,
-    on_data_reach = on_data_reach,
 }
 
 local client, err = http2.new(opts)
@@ -144,12 +135,11 @@ if not client then
     return
 end
 
-local ok, err = client:process()
+local ok, err = client:request(headers, nil, on_headers_reach, on_data_reach)
 if not ok then
     ngx.log(ngx.ERR, "client:process() failed: ", err)
     return
 end
-
 
 sock:close()
 ```
