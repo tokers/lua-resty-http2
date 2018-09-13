@@ -15,7 +15,12 @@ Table of Contents
 * [API Implemented](#api-implemented)
   * [resty.http2](#restyhttp2)
     * [http2.new](#http2new)
-    * [client:process](#clientprocess)
+    * [client:acknowledge_settings](#clientacknowledge_settings)
+    * [client:request](#clientrequest)
+    * [client:send_request](#clientsend_request)
+    * [client:read_headers](#clientread_headers)
+    * [client:read_body](#clientread_body)
+    * [client:close](#clientclose)
     * [client:keepalive](#clientkeepalive)
   * [resty.http2.protocol](#restyhttp2protocol)
     * [protocol.session](#protocolsession)
@@ -222,11 +227,30 @@ local ok, err = send(ctx, data)
 
 * `max_frame_size`, a Lua number which limits the max frame size that peer can send, default is `16777215`.
 
-* `prepare_request`, a Lua function, which is used to generate the pending HTTP request headers and request body, it will be called like:
+* `key`, a Lua string which represents which cached HTTP/2 session the callers want to resue, if not found, new HTTP/2 session will be created. See [client:keepalive](client:keepalive) for more details.
 
-```lua
-local headers, body = prepare_request(ctx)
-```
+[Back to TOC](#table-of-contents)
+
+
+### client:acknowledge_settings
+
+
+**syntax**: *local ok, err = client:acknowledge_settings()*
+
+Acknowledges peer's SETTINGS frame, settings will be applied automatically.
+
+In case of failure, `nil` and a Lua string will describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+
+### client:request
+
+**syntax**: *local ok, err = client:request(headers, body?, on_headers_reach, on_data_reach)*
+
+Sends a HTTP request to peer,
+
+In case of failure, `nil` and a Lua string will describes the error reason will be given.
 
 the `headers`, should be a hash-like Lua table represent the HTTP request headers, it is worth noting that this library doesn't take care of the HTTP headers' semantics, so it's callers' responsibility to supply this, and callers should implement any necessary conversions, for example, `Host` should be converted to `:authority`. Also, the following headers will be ignored as they are CONNECTION specific.
 
@@ -242,11 +266,11 @@ The `body`, can be a Lua string represents the HTTP request body. It also can be
 local part_data, last, err = body(size)
 ```
 
-In case of failure, `body` should provide the 3rd return value `err` to tell this library that some fatal errors happen, then the session will be aborted immediately.
+In case of failure, `body` should provide the 3rd return value `err` to tell this library that some fatal errors happen, then this method will be aborted immediately, and a GOAWAY frame will be sent to peer with error code INTERNAL_ERROR.
 
 When all data has been generated, the 2nd return value `last` should be provided, and it's value must be `true`.
 
-* `on_headers_reach`, a Lua function, as a callback which will be called when complete HTTP response headers are received, it will be called like:
+`on_headers_reach`, should be a Lua function, as a callback which will be called when complete HTTP response headers are received, it will be called like:
 
 ```lua
 local abort = on_headers_reach(ctx, headers)
@@ -256,7 +280,7 @@ The 2nd parameter `headers` is a hash-like Lua table which represents the HTTP r
 
 `on_headers_reach` can decide whether aborts the HTTP/2 session by returning a boolean value `abort` to the library, the HTTP/2 session will be aborted if `on_headers_reach` returns a true value.
 
-* `on_data_reach`, a Lua function, acts as the callback which will be called when response body are received every time, it will be called like:
+The last parameter, `on_data_reach`, is a Lua function, acts as the callback which will be called when response body are received every time, it will be called like:
 
 ```lua
 local abort = on_data_reach(ctx, data)
@@ -266,21 +290,59 @@ The 2nd parameter `data` is a Lua string represents the HTTP respose body receiv
 
 The meaning of return value is same as the `on_headers_reach`.
 
-* `key`, a Lua string which represents which cached HTTP/2 session the callers want to resue, if not found, new HTTP/2 session will be created. See [client:keepalive](client:keepalive) for more details.
+After this method returns, the HTTP/2 session is still alive, one can decide to close this session by calling [client:close](#clientcloe) or going ahead to do something.
 
 [Back to TOC](#table-of-contents)
 
-### client:process
 
-**syntax**: *local ok, err = client:process()*
+### client:send_request
 
-Starts the current HTTP/2 session, this function will return once:
+**syntax**: *local stream, err = client:send_request(headers, body?)*
 
-* any protocol errors or connection errors happen;
-* the HTTP/2 session closed due to GOAWAY frame was received or sent;
-* the underlying stream (deliverying callers' HTTP request) is end or reset;
+Sends the headers and body (if any) to peer.
 
-In case of any abormal return, `ok` will be `nil` and `err` will describe the error message.
+meanings of `headers` and `body` are same as the one in [client:request](#clientrequest).
+
+The corresponding created stream object will be given when this method returns.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+
+### client:read_headers
+
+**syntax**: *local headers, err = client:read_headers(stream)*
+
+Reads the response headers from peer, the parameter `stream` is the one created by [client:send_request](#clientsend_request).
+
+The return headers is a hash-like Lua table which contains the whole HTTP response headers, which may contains some pesudo-headers like `":status"`, callers should do some transforms if necessary.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### client:read_body
+
+**syntax**: *local body, err = client:read_body(stream)*
+
+Reads a DATA frame from peer, the parameter `stream` is the one created by [client:send_request](#clientsend_request).
+
+The return data is a Lua string which represents a piece of response body. Empty string will be given if the whole body were read done.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
+
+[Back to TOC](#table-of-contents)
+
+### client:close
+
+**syntax**: *local ok, err = client:close(code)*
+
+Closes the current HTTP/2 session with the error code `code`.
+
+See [resty.http2.error](#restyhttp2error) to learn the error codes.
+
+In case of failure, `nil` and a Lua string which describes the error reason will be given.
 
 [Back to TOC](#table-of-contents)
 

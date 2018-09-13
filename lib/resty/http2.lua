@@ -302,6 +302,10 @@ end
 
 
 function _M:read_body(stream)
+    if stream.done then
+        return ""
+    end
+
     local session = stream.session
 
     while not self.cached_body do
