@@ -159,6 +159,7 @@ client sent invalid method: "get"
         }
     }
 
+--- timeout: 10
 --- request
 GET /t
 
