@@ -89,6 +89,11 @@ function _M.is_func(func)
 end
 
 
+function _M.is_str(str)
+    return type(str) == "string"
+end
+
+
 -- TODO recycle the buffer struct if necessary
 function _M.new_buffer(data, pos, last)
     return {

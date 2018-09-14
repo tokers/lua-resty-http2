@@ -18,6 +18,7 @@ local setmetatable = setmetatable
 local new_tab = util.new_tab
 local clear_tab = util.clear_tab
 local debug_log = util.debug_log
+local is_str = util.is_str
 
 local _M = { _VERSION = "0.1" }
 local mt = { __index = _M }
@@ -348,6 +349,22 @@ local function write_length(preface, prefix, value, dst)
 end
 
 
+local function append_header(dst, name, value)
+    local old = dst[name]
+    if not old then
+        dst[name] = value
+        return
+    end
+
+    if is_str(old) then
+        dst[name] = { old, value }
+        return
+    end
+
+    old[#old + 1] = value
+end
+
+
 function _M.new(size)
     size = size or MAX_TABLE_SIZE
 
@@ -524,7 +541,7 @@ function _M:decode(dst)
                 return nil, h2_error.COMPRESSION_ERROR
             end
 
-            dst[entry.name] = entry.value
+            append_header(dst, entry.name, entry.value)
 
         elseif size_update then
             size_update = false
@@ -557,7 +574,7 @@ function _M:decode(dst)
                 return nil, h2_error.COMPRESSION_ERROR
             end
 
-            dst[header_name] = header_value
+            append_header(dst, header_name, header_value)
 
             if index_type == HPACK_INCR_INDEXING then
                 self:insert_entry(header_name, header_value)
