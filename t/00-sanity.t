@@ -39,6 +39,13 @@ our $http_config = << 'EOC';
                 ngx.header["Cookie"] = table.concat(cookie)
             }
         }
+
+        location = /t5 {
+            return 200;
+            add_header test-header 1;
+            add_header test-header 2;
+            add_header test-header 3;
+        }
     }
 EOC
 
@@ -549,7 +556,6 @@ GET /t
                 ctx = sock,
                 recv = sock.receive,
                 send = sock.send,
-                prepare_request = prepare_request,
                 preread_size = 1024,
             }
 
@@ -561,6 +567,88 @@ GET /t
             local ok, err = client:request(headers, nil, on_headers_reach,
                                            on_data_reach)
 
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local ok, err = sock:close()
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            ngx.print("OK")
+        }
+    }
+
+--- request
+GET /t
+
+--- response_body: OK
+--- no_error_log
+[error]
+
+
+=== TEST 8: duplicate response headers
+
+--- http_config eval: $::http_config
+--- config
+    location = /t {
+        content_by_lua_block {
+            local http2 = require "resty.http2"
+            local headers = {
+                { name = ":authority", value = "test.com" },
+                { name = ":method", value = "GET" },
+                { name = ":path", value = "/t5" },
+                { name = ":scheme", value = "http" },
+            }
+
+            local sock = ngx.socket.tcp()
+            local ok, err = sock:connect("127.0.0.1", 8083)
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local client, err = http2.new {
+                ctx = sock,
+                recv = sock.receive,
+                send = sock.send,
+                preread_size = 1024,
+            }
+
+            if not client then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local ok, err = client:acknowledge_settings()
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local stream, err = client:send_request(headers)
+            if not stream then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local headers, err = client:read_headers(stream)
+            if not headers then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            assert(type(headers["test-header"] == "table"))
+            local th = headers["test-header"]
+
+            assert(th[1] == "1")
+            assert(th[2] == "2")
+            assert(th[3] == "3")
+
+            local ok, err = client:close()
             if not ok then
                 ngx.log(ngx.ERR, err)
                 return
