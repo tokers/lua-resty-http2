@@ -3,6 +3,7 @@
 local h2_protocol = require "resty.http2.protocol"
 local h2_frame = require "resty.http2.frame"
 local h2_error = require "resty.http2.error"
+local h2_stream = require "resty.http2.stream"
 local util = require "resty.http2.util"
 
 local is_func = util.is_func
@@ -11,6 +12,7 @@ local new_tab = util.new_tab
 local new_buffer = util.new_buffer
 local sub = string.sub
 local min = math.min
+local pairs = pairs
 local setmetatable = setmetatable
 
 local _M = { _VERSION = "0.1" }
@@ -296,6 +298,10 @@ function _M:read_headers(stream)
 
     local headers = self.cached_headers
     self.cached_headers = nil
+
+    for name in pairs(h2_stream.IS_CONNECTION_SPEC_HEADERS) do
+        headers[name] = nil
+    end
 
     return headers
 end
