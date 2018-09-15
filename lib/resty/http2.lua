@@ -25,7 +25,8 @@ local function get_data_wrapper(data)
 
     return function(max_frame_size)
         if is_func(data) then
-            return data(max_frame_size)
+            local part = data(max_frame_size)
+            return part, part == ""
         end
 
         local data_size = #data

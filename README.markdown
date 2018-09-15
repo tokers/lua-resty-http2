@@ -242,7 +242,9 @@ Sends a HTTP request to peer,
 
 In case of failure, `nil` and a Lua string will describes the error reason will be given.
 
-the `headers`, should be a hash-like Lua table represent the HTTP request headers, it is worth noting that this library doesn't take care of the HTTP headers' semantics, so it's callers' responsibility to supply this, and callers should implement any necessary conversions, for example, `Host` should be converted to `:authority`. Also, the following headers will be ignored as they are CONNECTION specific.
+the `headers`, should be a array-like Lua table represent the HTTP request headers, each entry is like `{ name = "header1", value = "value1" }`.
+
+It is worth noting that this library doesn't take care of the HTTP headers' semantics, so it's callers' responsibility to supply this, and callers should implement any necessary conversions, for example, `Host` should be converted to `:authority`. Also, the following headers will be ignored as they are CONNECTION specific.
 
   * `Connection`
   * `Keep-Alive`
