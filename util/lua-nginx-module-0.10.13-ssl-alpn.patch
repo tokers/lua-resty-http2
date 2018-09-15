@@ -1,5 +1,5 @@
 diff --git a/src/ngx_http_lua_socket_tcp.c b/src/ngx_http_lua_socket_tcp.c
-index 0717c46d..fc8317e4 100644
+index 0717c46d..27735639 100644
 --- a/src/ngx_http_lua_socket_tcp.c
 +++ b/src/ngx_http_lua_socket_tcp.c
 @@ -1276,8 +1276,8 @@ ngx_http_lua_socket_tcp_sslhandshake(lua_State *L)
@@ -13,7 +13,7 @@ index 0717c46d..fc8317e4 100644
                            "arguments (including the object), but seen %d", n);
      }
  
-@@ -1421,6 +1421,45 @@ ngx_http_lua_socket_tcp_sslhandshake(lua_State *L)
+@@ -1421,6 +1421,44 @@ ngx_http_lua_socket_tcp_sslhandshake(lua_State *L)
                          return luaL_error(L, "no OCSP support");
  #endif
                      }
@@ -21,7 +21,6 @@ index 0717c46d..fc8317e4 100644
 +                    if (n >= 6) {
 +#if (defined TLSEXT_TYPE_application_layer_protocol_negotiation)
 +                        size_t          len;
-+                        ngx_uint_t      i;
 +                        const char     *data;
 +                        unsigned char  *list;
 +
@@ -59,7 +58,7 @@ index 0717c46d..fc8317e4 100644
                  }
              }
          }
-@@ -1649,6 +1688,19 @@ ngx_http_lua_ssl_handshake_retval_handler(ngx_http_request_t *r,
+@@ -1649,6 +1687,19 @@ ngx_http_lua_ssl_handshake_retval_handler(ngx_http_request_t *r,
          lua_pushlightuserdata(L, &ngx_http_lua_ssl_session_metatable_key);
          lua_rawget(L, LUA_REGISTRYINDEX);
          lua_setmetatable(L, -2);
@@ -71,7 +70,7 @@ index 0717c46d..fc8317e4 100644
 +
 +            SSL_get0_alpn_selected(c->ssl->connection, &data, &len);
 +
-+            lua_pushlstring(L, data, len);
++            lua_pushlstring(L, (const char *) data, (size_t) len);
 +
 +            return 2;
 +#endif
