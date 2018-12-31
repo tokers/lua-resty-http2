@@ -49,8 +49,9 @@ end
 
 
 function _M.pack_u16(u, dst)
-    dst[#dst + 1] = char(band(brshift(u, 8), 0xff))
-    dst[#dst + 1] = char(band(u, 0xff))
+    local len = #dst
+    dst[len + 1] = char(band(brshift(u, 8), 0xff))
+    dst[len + 2] = char(band(u, 0xff))
 end
 
 
@@ -60,10 +61,11 @@ end
 
 
 function _M.pack_u32(u, dst)
-    dst[#dst + 1] = char(band(brshift(u, 24), 0xff))
-    dst[#dst + 1] = char(band(brshift(u, 16), 0xff))
-    dst[#dst + 1] = char(band(brshift(u, 8), 0xff))
-    dst[#dst + 1] = char(band(u, 0xff))
+    local len = #dst
+    dst[len + 1] = char(band(brshift(u, 24), 0xff))
+    dst[len + 2] = char(band(brshift(u, 16), 0xff))
+    dst[len + 3] = char(band(brshift(u, 8), 0xff))
+    dst[len + 4] = char(band(u, 0xff))
 end
 
 
