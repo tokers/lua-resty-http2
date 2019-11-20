@@ -3,8 +3,7 @@ version = "1.0-0"
 
 source = {
     url = "git://github.com/tokers/lua-resty-http2",
-    -- tag = "v1.0",
-    branch = "master",
+    tag = "v1.0",
 }
 
 description = {
