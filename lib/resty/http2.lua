@@ -116,7 +116,13 @@ local function handle_frame(self, session, stream)
 
     local headers = typ == h2_frame.HEADERS_FRAME or h2_frame.CONTINUATION_FRAME
     if headers and frame.header.flag_end_headers then
-        self.cached_headers = frame.block_frags
+        if self.headers_read then
+            self.cached_trailers = frame.block_frags
+        else
+            self.headers_read = true
+            self.cached_headers = frame.block_frags
+        end
+
         return true
     end
 
@@ -183,7 +189,9 @@ function _M.new(opts)
 
     local client = {
         session = session,
+        headers_read = false,
         cached_headers = nil,
+        cached_trailers = nil,
         cached_body = nil,
         last_body = nil,
     }
@@ -320,6 +328,12 @@ function _M:read_body(stream)
         if not ok then
             return nil, err
         end
+
+        if self.cached_trailers then
+            -- we have read a header frame for trailer headers, now it's time
+            -- to return.
+            return
+        end
     end
 
     local body = self.cached_body.data
@@ -329,7 +343,8 @@ function _M:read_body(stream)
 end
 
 
-function _M:request(headers, body, on_headers_reach, on_data_reach)
+function _M:request(headers, body, on_headers_reach, on_data_reach,
+    on_trailers_reach)
     local ack, err = self:acknowledge_settings()
     if not ack then
         return nil, err
@@ -376,6 +391,11 @@ function _M:request(headers, body, on_headers_reach, on_data_reach)
     while true do
         data, err = self:read_body(stream)
         if not data then
+            if self.cached_trailers then
+                -- we have met trailer headers
+                break
+            end
+
             return nil, err
         end
 
@@ -386,6 +406,19 @@ function _M:request(headers, body, on_headers_reach, on_data_reach)
 
         if stream.done then
             break
+        end
+    end
+
+    if self.cached_trailers then
+        local trailers = self.cached_trailers
+        self.cached_trailers = nil
+        if on_data_reach and on_trailers_reach(ctx, trailers) then
+            return self:close(h2_error.INTERNAL_ERROR)
+        end
+
+        if not session.done then
+            -- unexpected extra data after trailer headers
+            return self:close(h2_stream.PROTOCOL_ERROR)
         end
     end
 

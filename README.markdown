@@ -236,7 +236,7 @@ In case of failure, `nil` and a Lua string will describes the error reason will 
 
 ### client:request
 
-**syntax**: *local ok, err = client:request(headers, body?, on_headers_reach, on_data_reach)*
+**syntax**: *local ok, err = client:request(headers, body?, on_headers_reach, on_data_reach, on_trailers_reach)*
 
 Sends a HTTP request to peer,
 
@@ -272,7 +272,7 @@ The 2nd parameter `headers` is a hash-like Lua table which represents the HTTP r
 
 `on_headers_reach` can decide whether aborts the HTTP/2 session by returning a boolean value `abort` to the library, the HTTP/2 session will be aborted if `on_headers_reach` returns a true value.
 
-The last parameter, `on_data_reach`, is a Lua function, acts as the callback which will be called when response body are received every time, it will be called like:
+The parameter `on_data_reach`, is a Lua function, acts as the callback which will be called when response body are received every time, it will be called like:
 
 ```lua
 local abort = on_data_reach(ctx, data)
@@ -283,6 +283,17 @@ The 2nd parameter `data` is a Lua string represents the HTTP respose body receiv
 The meaning of return value is same as the `on_headers_reach`.
 
 After this method returns, the HTTP/2 session is still alive, one can decide to close this session by calling [client:close](#clientcloe) or going ahead to do something.
+
+The last parameter `on_trailers_reach` is not necessary but is required if
+trailer headers exist in in some scenarios (like gRPC).
+
+```lua
+local abort = on_trailers_reach(ctx, trailers)
+```
+
+The 2nd parameter is the a hash-like Lua table which holds all the trailer HTTP headers.
+
+Likewise, `on_trailers_reach` can decide whether aborts the HTTP/2 session by passing the return value `abort`, session will be aborted if `abort` is true.
 
 [Back to TOC](#table-of-contents)
 

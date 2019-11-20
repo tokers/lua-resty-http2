@@ -47,6 +47,13 @@ local on_data_reach = function(ctx, data)
     print(data)
 end
 
+local on_trailers_reach = function(ctx, data)
+    print("received HEADERS frame for trailer headers:")
+    for k, v in pairs(headers) do
+        print(k, ": ", v)
+    end
+end
+
 local opts = {
     ctx = sock,
     recv = sock.receive,
@@ -62,7 +69,7 @@ if not client then
 end
 
 local ok, err = client:request(headers, nil, on_headers_reach,
-                               on_data_reach)
+                               on_data_reach, on_trailers_reach)
 if not ok then
     print("client:request() failed: ", err)
     exit(1)
