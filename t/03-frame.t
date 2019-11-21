@@ -31,6 +31,16 @@ our $http_config = << 'EOC';
                 ngx.header["Cookie"] = ngx.var.http_cookie
             }
         }
+
+        location = /t3 {
+            add_trailer header1 value1;
+            add_trailer header2 value2;
+            add_header trailer "header1,header2";
+
+            content_by_lua_block {
+                ngx.say("hello world")
+            }
+        }
     }
 EOC
 
@@ -276,6 +286,86 @@ GET /t
             assert(frame.header.flag_ack == true)
             assert(frame.opaque_data_hi == 1234)
             assert(frame.opaque_data_lo == 5678)
+
+            local ok, err = sock:close()
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            ngx.print("OK")
+        }
+    }
+
+--- request
+GET /t
+
+--- response_body: OK
+--- no_error_log
+[error]
+
+
+=== TEST 4: trailers frame
+
+--- http_config eval: $::http_config
+--- config
+    location = /t {
+        content_by_lua_block {
+            local http2 = require "resty.http2"
+            local h2_frame = require "resty.http2.frame"
+
+            local headers = {
+                { name = ":authority", value = "test.com" },
+                { name = ":method", value = "GET" },
+                { name = ":path", value = "/t3" },
+                { name = ":scheme", value = "http" },
+            }
+
+            local on_headers_reach = function(ctx, headers)
+                if headers["trailer"] ~= "header1,header2" then
+                    error("unexpected trailer header value")
+                end
+            end
+
+            local on_data_reach = function(ctx, data)
+                if data ~= "hello world\n" then
+                    error("unexpected data value")
+                end
+            end
+
+            local on_trailers_reach = function(ctx, trailers)
+                if trailers["header1"] ~= "value1"
+                   or trailers["header2"] ~= "value2"
+                then
+                    error("unexpected trailers")
+                end
+            end
+
+            local sock = ngx.socket.tcp()
+            local ok, err = sock:connect("127.0.0.1", 8083)
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            client, err = http2.new {
+                ctx = sock,
+                recv = sock.receive,
+                send = sock.send,
+                preread_size = 1024,
+            }
+
+            if not client then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+
+            local ok, err = client:request(headers, nil, on_headers_reach,
+                                           on_data_reach, on_trailers_reach)
+            if not ok then
+                ngx.log(ngx.ERR, err)
+                return
+            end
 
             local ok, err = sock:close()
             if not ok then
