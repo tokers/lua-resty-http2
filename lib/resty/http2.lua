@@ -169,15 +169,16 @@ function _M.new(opts)
     local session
     local err
     local ok
+    local reuse_cnt
+    reuse_cnt, err = ctx:getreusedtimes()
 
-    if key and session_pool[key] then
+    if key and session_pool[key] and reuse_cnt ~= nil and reuse_cnt ~= 0 then
         session = session_pool[key]
         session_pool[key] = nil
         ok, err = session:attach(recv, send, ctx)
         if not ok then
             return nil, err
         end
-
     else
         session, err = h2_protocol.session(recv, send, ctx, preread_size,
                                            max_concurrent_stream,
