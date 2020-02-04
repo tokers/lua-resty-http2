@@ -243,7 +243,7 @@ function _M:submit_request(headers, no_body, priority, pad)
 
     local total = self.total_streams
     if total == self.max_streams then
-        return nil, h2_error.STRERAM_OVERFLOW
+        return nil, h2_error.STREAM_FLOW_CONTROL_ERROR
     end
 
     if self.goaway_sent or self.goaway_received then
